@@ -73,8 +73,8 @@ impl Error for SelfEncryptionStorageError {
         self.0.description()
     }
 
-    fn cause(&self) -> Option<&Error> {
-        self.0.cause()
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.0.source()
     }
 }
 

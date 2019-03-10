@@ -37,6 +37,7 @@ use tiny_keccak::sha3_256;
 use tokio_core::reactor::Handle;
 use utils;
 
+/// Simplify waiting for a response when we don't have an event loop.
 #[macro_export]
 macro_rules! wait_for_response {
     ($rx:expr, $res:path, $msg_id:expr) => {

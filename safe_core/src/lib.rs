@@ -17,7 +17,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/maidsafe/QA/master/Images/maidsafe_logo.png",
     html_favicon_url = "http://maidsafe.net/img/favicon.ico",
-    test(attr(forbid(warnings))),
+    test(attr(forbid(warnings)))
 )]
 // For explanation of lint checks, run `rustc -W help` or see
 // https://github.
@@ -65,12 +65,7 @@
 )]
 #![cfg_attr(
     feature = "cargo-clippy",
-    deny(
-        clippy,
-        unicode_not_nfc,
-        wrong_pub_self_convention,
-        option_unwrap_used
-    )
+    deny(clippy, unicode_not_nfc, wrong_pub_self_convention, option_unwrap_used)
 )]
 #![cfg_attr(
     feature = "cargo-clippy",
@@ -84,6 +79,7 @@ extern crate ffi_utils;
 #[cfg(feature = "use-mock-routing")]
 extern crate fs2;
 extern crate futures;
+extern crate redland_rs;
 #[cfg(feature = "use-mock-routing")]
 #[macro_use]
 extern crate lazy_static;
@@ -131,6 +127,8 @@ pub mod immutable_data;
 pub mod ipc;
 /// NFS utilities.
 pub mod nfs;
+/// RDF utilities.
+pub mod rdf;
 /// Implements the Self Encryption storage trait.
 pub mod self_encryption_storage;
 

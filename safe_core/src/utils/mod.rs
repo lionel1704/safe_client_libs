@@ -22,6 +22,7 @@ use rand::Rng;
 use rust_sodium::crypto::hash::sha512::{self, Digest, DIGESTBYTES};
 use rust_sodium::crypto::secretbox;
 
+/// `BTreeSet` literals.
 #[macro_export]
 macro_rules! btree_set {
     ($($item:expr),*) => {{
@@ -37,6 +38,7 @@ macro_rules! btree_set {
     };
 }
 
+/// `BTreeMap` literals.
 #[macro_export]
 macro_rules! btree_map {
     () => ({

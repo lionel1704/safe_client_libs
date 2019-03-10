@@ -16,17 +16,21 @@ config_file_handler = "~0.11.0"
 ffi_utils = "~0.11.0"
 fs2 = "~0.4.3"
 futures = "~0.1.17"
-lazy_static = "~1.0.0"
+lazy_static = "~1.2.0"
 log = "~0.4.1"
 lru-cache = "~0.1.1"
 maidsafe_utilities = "~0.16.0"
 rand = "~0.3.18"
-routing = "~0.37.0"
+redland-rs = { path = "../../redland-rs" }
+# redland-rs = { git = "https://github.com/nbaksalyar/redland-rs.git", branch = "master" }
+# routing = "~0.37.0"
+routing = { path = "../../routing" }
 rust_sodium = "~0.10.0"
-self_encryption = "~0.13.0"
-serde = "~1.0.27"
-serde_derive = "~1.0.27"
-tiny-keccak = "~1.3.1"
+# self_encryption = "~0.13.0"
+self_encryption = { path = "../../self_encryption" }
+serde = "~1.0.89"
+serde_derive = "~1.0.89"
+tiny-keccak = "~1.4.1"
 tokio-core = "~0.1.17"
 unwrap = "~1.2.0"
 
