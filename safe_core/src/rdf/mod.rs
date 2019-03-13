@@ -83,15 +83,25 @@ fn convert_entry_actions(eas: &[EntryAction]) -> BTreeMap<Vec<u8>, MDEntryAction
     println!("{:?}", eas);
 
     eas.iter()
-        .map(|ea| match ea {
-            EntryAction::Insert(id, key, data) => (
-                unwrap!(serialise(&(id, key.clone()))),
+        .fold(BTreeMap::new(), |mut map, ea| match ea {
+            EntryAction::Insert(id, key, data) => {
+                map.entry(key.clone())
+                    .or_insert_with(Vec::new)
+                    .push((id, data.clone()));
+                map
+            }
+            EntryAction::Delete(_id, _key) => map, // TODO: fix deletion
+                                                   // EntryAction::Delete(_id, key) => (key.clone(), MDEntryAction::Del(1)),
+        })
+        .into_iter()
+        .map(|(key, val)| {
+            (
+                key,
                 MDEntryAction::Ins(Value {
-                    content: data.clone(),
+                    content: unwrap!(serialise(&val)),
                     entry_version: 0,
                 }),
-            ),
-            EntryAction::Delete(_id, key) => (key.clone(), MDEntryAction::Del(1)), // FIXME: handle versions and deletion properly
+            )
         })
         .collect()
 }
@@ -101,9 +111,11 @@ fn convert_kv(md_kv: &BTreeMap<Vec<u8>, Value>) -> Vec<EntryAction> {
 
     md_kv
         .iter()
-        .map(|(key, value)| {
-            let (id, key) = unwrap!(deserialise(&key));
-            EntryAction::Insert(id, key, value.content.clone())
+        .flat_map(|(key, value)| {
+            let vals: Vec<(i32, Vec<u8>)> = unwrap!(deserialise(&value.content));
+            let key2 = key.clone();
+            vals.into_iter()
+                .map(move |(id, data)| EntryAction::Insert(id, key2.clone(), data))
         })
         .collect()
 }
@@ -131,7 +143,6 @@ mod tests {
 
             let uri1 = unwrap!(Uri::new(rdf.world(), "https://localhost/#dolly"));
             let uri2 = unwrap!(Uri::new(rdf.world(), "https://localhost/#hears"));
-            let uri3 = unwrap!(Uri::new(rdf.world(), "https://localhost/#louis"));
 
             let mut triple1 = unwrap!(Statement::new(rdf.world()));
             triple1.set_subject(unwrap!(Node::new_from_uri(rdf.world(), &uri1)));
@@ -144,7 +155,7 @@ mod tests {
             )));
 
             let mut triple2 = unwrap!(Statement::new(rdf.world()));
-            triple2.set_subject(unwrap!(Node::new_from_uri(rdf.world(), &uri3)));
+            triple2.set_subject(unwrap!(Node::new_from_uri(rdf.world(), &uri1)));
             triple2.set_predicate(unwrap!(Node::new_from_uri(rdf.world(), &uri2)));
             triple2.set_object(unwrap!(Node::new_from_literal(
                 rdf.world(),
