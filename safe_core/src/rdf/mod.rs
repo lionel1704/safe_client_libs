@@ -9,14 +9,12 @@
 use crate::{Client, CoreError, MDataInfo};
 use futures::Future;
 use maidsafe_utilities::serialisation::{deserialise, serialise};
-use redland_rs::{EntryAction, KvStorage, Model, ModelIter, World};
+use redland_rs::{EntryAction, KvStorage, Model, ModelIter};
 use routing::{EntryAction as MDEntryAction, Value};
 use std::collections::BTreeMap;
 
 /// Represents an abstract RDF graph model
 pub struct RdfGraph {
-    /// Holds internal state of the RDF library
-    world: World,
     /// Holds the internal state of the RDF graph
     model: Model,
     /// Holds internal triples storage
@@ -26,24 +24,14 @@ pub struct RdfGraph {
 impl RdfGraph {
     /// Create a new RDF graph
     pub fn new() -> Result<Self, i32> {
-        let world = World::new();
-        let storage = KvStorage::new(&world)?;
-        let model = Model::new(&world, &storage)?;
-        Ok(RdfGraph {
-            world,
-            model,
-            storage,
-        })
+        let storage = KvStorage::new()?;
+        let model = Model::new(&storage)?;
+        Ok(RdfGraph { model, storage })
     }
 
     /// Get RDF model
     pub fn model_mut(&mut self) -> &mut Model {
         &mut self.model
-    }
-
-    /// Return internal representation of RDF world
-    pub fn world(&self) -> &World {
-        &self.world
     }
 
     /// Store an RDF graph on the network
@@ -141,28 +129,18 @@ mod tests {
             // Create a new graph.
             let mut rdf = unwrap!(RdfGraph::new());
 
-            let uri1 = unwrap!(Uri::new(rdf.world(), "https://localhost/#dolly"));
-            let uri2 = unwrap!(Uri::new(rdf.world(), "https://localhost/#hears"));
+            let uri1 = unwrap!(Uri::new("https://localhost/#dolly"));
+            let uri2 = unwrap!(Uri::new("https://localhost/#hears"));
 
-            let mut triple1 = unwrap!(Statement::new(rdf.world()));
-            triple1.set_subject(unwrap!(Node::new_from_uri(rdf.world(), &uri1)));
-            triple1.set_predicate(unwrap!(Node::new_from_uri(rdf.world(), &uri2)));
-            triple1.set_object(unwrap!(Node::new_from_literal(
-                rdf.world(),
-                "hello",
-                None,
-                false
-            )));
+            let mut triple1 = unwrap!(Statement::new());
+            triple1.set_subject(unwrap!(Node::new_from_uri(&uri1)));
+            triple1.set_predicate(unwrap!(Node::new_from_uri(&uri2)));
+            triple1.set_object(unwrap!(Node::new_from_literal("hello", None, false)));
 
-            let mut triple2 = unwrap!(Statement::new(rdf.world()));
-            triple2.set_subject(unwrap!(Node::new_from_uri(rdf.world(), &uri1)));
-            triple2.set_predicate(unwrap!(Node::new_from_uri(rdf.world(), &uri2)));
-            triple2.set_object(unwrap!(Node::new_from_literal(
-                rdf.world(),
-                "goodbye",
-                None,
-                false
-            )));
+            let mut triple2 = unwrap!(Statement::new());
+            triple2.set_subject(unwrap!(Node::new_from_uri(&uri1)));
+            triple2.set_predicate(unwrap!(Node::new_from_uri(&uri2)));
+            triple2.set_object(unwrap!(Node::new_from_literal("goodbye", None, false)));
 
             {
                 let model = rdf.model_mut();
