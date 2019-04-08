@@ -312,7 +312,7 @@ pub fn access_container_enc_key(
 }
 
 /// Information about an app that has access to an MD through `sign_key`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppAccess {
     /// App's or user's public key
     pub sign_key: PublicKey,
