@@ -77,6 +77,14 @@
     allow(clippy::implicit_hasher, clippy::too_many_arguments, clippy::use_debug)
 )]
 
+extern crate chrono;
+extern crate config_file_handler;
+extern crate data_encoding;
+extern crate ffi_utils;
+#[cfg(feature = "mock-network")]
+extern crate fs2;
+extern crate futures;
+extern crate redland_rs;
 #[cfg(feature = "mock-network")]
 #[macro_use]
 extern crate lazy_static;
@@ -115,6 +123,8 @@ pub mod immutable_data;
 pub mod ipc;
 /// NFS utilities.
 pub mod nfs;
+/// RDF utilities.
+pub mod rdf;
 /// Implements the Self Encryption storage trait.
 pub mod self_encryption_storage;
 

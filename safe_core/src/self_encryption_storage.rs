@@ -73,11 +73,8 @@ impl Error for SelfEncryptionStorageError {
         self.0.description()
     }
 
-    fn cause(&self) -> Option<&Error> {
-        // Temporarily turn off the deprecation lint here.
-        // Change from `cause()` to `source()` and delete this `allow` once we're on stable Rust.
-        #[allow(deprecated)]
-        self.0.cause()
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.0.source()
     }
 }
 
