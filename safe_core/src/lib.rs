@@ -27,7 +27,7 @@
     mutable_transmutes,
     no_mangle_const_items,
     unknown_crate_types,
-    warnings
+    // warnings
 )]
 #![deny(
     bad_style,
@@ -77,14 +77,6 @@
     allow(clippy::implicit_hasher, clippy::too_many_arguments, clippy::use_debug)
 )]
 
-extern crate chrono;
-extern crate config_file_handler;
-extern crate data_encoding;
-extern crate ffi_utils;
-#[cfg(feature = "mock-network")]
-extern crate fs2;
-extern crate futures;
-extern crate redland_rs;
 #[cfg(feature = "mock-network")]
 #[macro_use]
 extern crate lazy_static;

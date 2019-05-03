@@ -22,17 +22,14 @@ log = "~0.4.1"
 lru-cache = "~0.1.1"
 maidsafe_utilities = "~0.16.0"
 rand = "~0.3.18"
-routing = "~0.37.0"
+routing = { git = "https://github.com/lionel1704/routing", branch = "rdf" }
 rust_sodium = "~0.10.2"
-self_encryption = "~0.13.0"
-serde = "~1.0.27"
-serde_derive = "~1.0.27"
-tiny-keccak = "~1.3.1"
+self_encryption = { git = "https://github.com/lionel1704/self_encryption", branch = "rdf" }
+tiny-keccak = "~1.4.1"
 tokio = "=0.1.8"
 redland-rs = { path = "../../redland-rs" }
 serde = "~1.0.89"
 serde_derive = "~1.0.89"
-tiny-keccak = "~1.4.1"
 tokio-core = "~0.1.17"
 unwrap = "~1.2.0"
 

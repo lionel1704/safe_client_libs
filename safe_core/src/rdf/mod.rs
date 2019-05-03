@@ -115,7 +115,7 @@ mod tests {
     use futures::Future;
     use redland_rs::{Node, Statement, Uri};
     use routing::MutableData;
-    use utils::test_utils::random_client;
+    use crate::utils::test_utils::random_client;
 
     // Test storing RDF triples in Mutable Data on the network.
     #[test]
