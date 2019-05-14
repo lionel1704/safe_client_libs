@@ -82,11 +82,22 @@ impl RdfGraph {
 }
 
 /// Actions on Redland hashes (key-value pairs)
-pub enum Action {
+#[derive(Default)]
+pub struct MDataEntryActions {
     /// Insert a new key-value pair
-    Insert,
+    insertions: Vec<(i32, Vec<u8>)>,
     /// Remove a single value from a key
-    Delete,
+    deletions: Vec<(i32, Vec<u8>)>,
+}
+
+impl MDataEntryActions {
+    fn insert(&mut self, id: i32, data: Vec<u8>) {
+        self.insertions.push((id, data));
+    }
+
+    fn delete(&mut self, id: i32, data: Vec<u8>) {
+        self.deletions.push((id, data));
+    }
 }
 
 fn convert_entry_actions(
@@ -94,72 +105,65 @@ fn convert_entry_actions(
     entries: &BTreeMap<Vec<u8>, Value>,
 ) -> BTreeMap<Vec<u8>, MDEntryAction> {
     eas.iter()
-        .fold(BTreeMap::new(), |mut map, ea| {
-            // println!("{}", ea);
-            match ea {
-                EntryAction::Insert(id, key, data) => {
-                    map.entry(key.clone()).or_insert_with(Vec::new).push((
-                        id,
-                        data.clone(),
-                        Action::Insert,
-                    ));
-                    map
+        .fold(
+            BTreeMap::<Vec<u8>, MDataEntryActions>::new(),
+            |mut map, ea| {
+                // println!("{}", ea);
+                match ea {
+                    EntryAction::Insert(id, key, data) => {
+                        map.entry(key.clone())
+                            .or_insert_with(Default::default)
+                            .insert(*id, data.clone());
+                        map
+                    }
+                    EntryAction::Delete(id, key, data) => {
+                        map.entry(key.clone())
+                            .or_insert_with(Default::default)
+                            .delete(*id, data.clone());
+                        map
+                    }
                 }
-                EntryAction::Delete(id, key, data) => {
-                    map.entry(key.clone()).or_insert_with(Vec::new).push((
-                        id,
-                        data.clone(),
-                        Action::Delete,
-                    ));
-                    map
-                }
-            }
-        })
+            },
+        )
         .into_iter()
-        .map(|(key, val)| {
-            let mut values: Vec<_> = val.iter().map(|v| (*v.0, v.1.clone())).collect();
-            match &val[0].2 {
-                Action::Insert => match entries.get(&key) {
-                    Some(value) => {
-                        let mut list: Vec<_> = unwrap!(deserialise(&value.content));
-                        list.append(&mut values);
-                        (
-                            key,
-                            MDEntryAction::Update(Value {
-                                content: unwrap!(serialise(&list)),
-                                entry_version: value.entry_version + 1,
-                            }),
-                        )
-                    }
-                    None => {
-                        (
-                            key,
-                            MDEntryAction::Ins(Value {
-                                content: unwrap!(serialise(&values)),
-                                entry_version: 0,
-                            }),
-                        )
-                    }
-                },
-                Action::Delete => {
-                    let serialized_value = unwrap!(entries.get(&key));
-                    let mut list: Vec<(i32, Vec<u8>)> =
-                        unwrap!(deserialise(&serialized_value.content));
-                    let _: Vec<_> = values
-                        .iter()
-                        .map(|i| {
-                            let index = list.iter_mut().position(|x| x.1 == i.1).unwrap();
-                            list.remove(index)
-                        })
-                        .collect();
-                    (
-                        key,
-                        MDEntryAction::Update(Value {
-                            content: unwrap!(serialise(&list)),
-                            entry_version: serialized_value.entry_version + 1,
-                        }),
-                    )
-                }
+        .map(|(key, mut val)| match entries.get(&key) {
+            Some(value) => {
+                let mut list: Vec<_> = unwrap!(deserialise(&value.content));
+                list.append(&mut val.insertions);
+                let _: Vec<_> = val
+                    .deletions
+                    .iter()
+                    .map(|i| {
+                        let index = list.iter_mut().position(|x| x.1 == i.1).unwrap();
+                        list.remove(index)
+                    })
+                    .collect();
+                (
+                    key,
+                    MDEntryAction::Update(Value {
+                        content: unwrap!(serialise(&list)),
+                        entry_version: value.entry_version + 1,
+                    }),
+                )
+            }
+            None => {
+                let mut list: Vec<_> = Vec::new();
+                list.append(&mut val.insertions);
+                let _: Vec<_> = val
+                    .deletions
+                    .iter()
+                    .map(|i| {
+                        let index = list.iter_mut().position(|x| x.1 == i.1).unwrap();
+                        list.remove(index)
+                    })
+                    .collect();
+                (
+                    key,
+                    MDEntryAction::Ins(Value {
+                        content: unwrap!(serialise(&list)),
+                        entry_version: 0,
+                    }),
+                )
             }
         })
         .collect()
@@ -296,7 +300,6 @@ mod tests {
                 let model = rdf.model_mut();
                 unwrap!(model.remove_statement(&triple1));
                 rdf.store(client3, &resource3)
-
             })
         });
 
