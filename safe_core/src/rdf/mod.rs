@@ -6,20 +6,26 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+// RDF Serialisation
+mod serialisation;
+
 use crate::{Client, CoreError, MDataInfo};
 use futures::Future;
 // use hex_fmt::HexFmt;
 use maidsafe_utilities::serialisation::{deserialise, serialise};
-use redland_rs::{EntryAction, KvStorage, Model, ModelIter};
+use redland_rs::{EntryAction, KvStorage, Model, ModelIter, Uri};
 use routing::{EntryAction as MDEntryAction, Value};
 use std::collections::BTreeMap;
 
+#[derive(Clone)]
 /// Represents an abstract RDF graph model
 pub struct RdfGraph {
     /// Holds the internal state of the RDF graph
     model: Model,
     /// Holds internal triples storage
     storage: KvStorage,
+    /// Map of prefixes with their namespace URLs
+    namespaces: BTreeMap<String, Uri>,
 }
 
 impl RdfGraph {
@@ -27,7 +33,12 @@ impl RdfGraph {
     pub fn new() -> Result<Self, i32> {
         let storage = KvStorage::new()?;
         let model = Model::new(&storage)?;
-        Ok(RdfGraph { model, storage })
+        let namespaces = BTreeMap::new();
+        Ok(RdfGraph {
+            model,
+            storage,
+            namespaces,
+        })
     }
 
     /// Get RDF model
@@ -38,6 +49,16 @@ impl RdfGraph {
     /// Get RDF storage
     pub fn storage(&mut self) -> &mut KvStorage {
         &mut self.storage
+    }
+
+    // /// Add a namespace for the RDF model
+    // pub fn add_namespace(&mut self, prefix: String, uri: Uri) {
+    //     self.namespaces.insert(prefix, uri);
+    // }
+
+    /// Returns a mutable reference to the list of namespaces
+    pub fn namespaces_mut(&mut self) -> &mut BTreeMap<String, Uri> {
+        &mut self.namespaces
     }
 
     /// Store an RDF graph on the network
@@ -78,6 +99,11 @@ impl RdfGraph {
     /// Iterate over statements contained in this graph
     pub fn iter(&self) -> ModelIter {
         self.model.iter()
+    }
+
+    /// Returns the number of statements in the graph
+    pub fn len(&self) -> i32 {
+        self.model.len()
     }
 }
 

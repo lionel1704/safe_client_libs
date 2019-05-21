@@ -27,7 +27,7 @@ rust_sodium = "~0.10.2"
 self_encryption = { git = "https://github.com/lionel1704/self_encryption", branch = "rdf" }
 tiny-keccak = "~1.4.1"
 tokio = "=0.1.8"
-redland-rs = { git = "https://github.com/lionel1704/redland-rs" }
+redland-rs = { path = "../../redland-rs" }
 serde = "~1.0.89"
 serde_derive = "~1.0.89"
 tokio-core = "~0.1.17"
