@@ -162,6 +162,50 @@ impl Vault {
         }
     }
 
+    pub fn authorise_delete(
+        &self,
+        dst: &Authority<XorName>,
+        data_name: &XorName,
+    ) -> Result<(), ClientError> {
+        match *dst {
+            Authority::NaeManager(name) if name == *data_name => Ok(()),
+            x => {
+                debug!("Unexpected authority for delete: {:?}", x);
+                Err(ClientError::InvalidOperation)
+            }
+        }
+    }
+
+    pub fn authorised_delete(
+        &self,
+        data_name: DataId,
+        requester: threshold_crypto::PublicKey,
+    ) -> Result<Data, ClientError> {
+        match self.get_data(&data_name) {
+            Some(data_type) => match data_type {
+                Data::NewMutable(kind) => match kind {
+                    MutableDataKind::Unsequenced(data) => {
+                        if data.is_action_allowed(requester, Action::Delete) {
+                            Ok(unwrap!(self.get_data(&data_name)))
+                        } else {
+                            Err(ClientError::AccessDenied)
+                        }
+                    }
+                    MutableDataKind::Sequenced(data) => {
+                        if data.is_action_allowed(requester, Action::Delete) {
+                            Ok(unwrap!(self.get_data(&data_name)))
+                        } else {
+                            Err(ClientError::AccessDenied)
+                        }
+                    }
+                },
+                // Handle other types
+                _ => Ok(unwrap!(self.get_data(&data_name))),
+            },
+            _ => Err(ClientError::NoSuchData),
+        }
+    }
+
     // Authorise mutation operation.
     pub fn authorise_mutation(
         &self,
@@ -199,6 +243,37 @@ impl Vault {
         Ok(())
     }
 
+    // Authorise mutation operation.
+    pub fn authorise_mutation1(
+        &self,
+        dst: &Authority<XorName>,
+        _sign_pk: &threshold_crypto::PublicKey,
+    ) -> Result<(), ClientError> {
+        let dst_name = match *dst {
+            Authority::ClientManager(name) => name,
+            x => {
+                debug!("Unexpected authority for mutation: {:?}", x);
+                return Err(ClientError::InvalidOperation);
+            }
+        };
+
+        let account = match self.get_account(&dst_name) {
+            Some(account) => account,
+            None => {
+                debug!("Account not found for {:?}", dst);
+                return Err(ClientError::NoSuchAccount);
+            }
+        };
+        // TODO: Check if we are the owner or app once account keys are changed to threshold_crypto
+
+        let unlimited_mut = unlimited_muts(&self.config);
+        if !unlimited_mut && account.account_info().mutations_available == 0 {
+            return Err(ClientError::LowBalance);
+        }
+
+        Ok(())
+    }
+
     // Commit a mutation.
     pub fn commit_mutation(&mut self, dst: &Authority<XorName>) {
         {
@@ -220,6 +295,11 @@ impl Vault {
     // Save the data to the storage.
     pub fn insert_data(&mut self, name: DataId, data: Data) {
         let _ = self.cache.nae_manager.insert(name, data);
+    }
+
+    // Delete the data from the storage.
+    pub fn delete_data(&mut self, name: DataId) {
+        let _ = self.cache.nae_manager.remove(&name);
     }
 
     pub fn process_request(
@@ -427,6 +507,19 @@ impl Vault {
                 }));
                 Ok((dest, payload))
             }
+            Request::DeleteMData {
+                address,
+                requester,
+                message_id,
+            } => {
+                let name = address.name();
+                let res = self.delete_mdata(dest, address.clone(), requester);
+                let payload = unwrap!(serialise(&Response::DeleteMData {
+                    res,
+                    msg_id: message_id,
+                }));
+                Ok((Authority::NaeManager(XorName(name)), payload))
+            }
             _ => {
                 // Dummy return
                 // other requests to be handled by their data type impls
@@ -466,6 +559,26 @@ impl Vault {
                     Err(ClientError::DataExists)
                 } else {
                     self.insert_data(data_name, Data::NewMutable(data));
+                    Ok(())
+                }
+            })
+            .map(|_| self.commit_mutation(&dst))
+    }
+
+    pub fn delete_mdata(
+        &mut self,
+        dst: Authority<XorName>,
+        data: MutableDataRef,
+        requester: threshold_crypto::PublicKey,
+    ) -> Result<(), ClientError> {
+        let data_name = DataId::mutable(XorName(data.name()), data.tag());
+        self.authorise_mutation1(&dst, &requester)
+            .and_then(|_| self.authorised_delete(data_name, requester))
+            .and_then(|_| {
+                if !self.contains_data(&data_name) {
+                    Err(ClientError::NoSuchData)
+                } else {
+                    self.delete_data(data_name);
                     Ok(())
                 }
             })

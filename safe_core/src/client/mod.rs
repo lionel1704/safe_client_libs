@@ -346,6 +346,26 @@ pub trait Client: Clone + 'static {
         .into_box()
     }
 
+    /// Delete MData from network
+    fn delete_mdata(&self, mdataref: MutableDataRef) -> Box<CoreFuture<()>> {
+        trace!("Delete entire Mutable Data");
+
+        let requester = some_or_err!(self.public_bls_key());
+        let client = Authority::Client {
+            client_id: *some_or_err!(self.full_id()).public_id(),
+            proxy_node_name: rand::random(),
+        };
+
+        send_mutation(self, move |routing, dst, msg_id| {
+            let request = Request::DeleteMData {
+                address: mdataref.clone(),
+                requester,
+                message_id: msg_id.to_new(),
+            };
+            routing.send(client, dst, &unwrap!(serialise(&request)))
+        })
+    }
+
     /// Mutates `MutableData` entries in bulk.
     fn mutate_mdata_entries(
         &self,
@@ -1054,9 +1074,9 @@ where
                 let response_buffer = unwrap!(res);
                 let response: Response<ClientError> = unwrap!(deserialise(&response_buffer));
                 match response {
-                    Response::PutUnseqMData { res, .. } | Response::PutSeqMData { res, .. } => {
-                        res.map_err(CoreError::from)
-                    }
+                    Response::PutUnseqMData { res, .. }
+                    | Response::PutSeqMData { res, .. }
+                    | Response::DeleteMData { res, .. } => res.map_err(CoreError::from),
                     _ => Err(CoreError::ReceivedUnexpectedEvent),
                 }
             }
@@ -1292,5 +1312,85 @@ mod tests {
                 })
                 .then(|res| res)
         });
+    }
+
+    #[test]
+    #[should_panic]
+    pub fn del_seq_mdata_test() {
+        let _ = random_client(move |client| {
+            let client2 = client.clone();
+            let client3 = client.clone();
+            let name = rand::random();
+            let tag = 15001;
+            let mdataref = MutableDataRef::new(name, tag);
+            let data = SeqMutableData::new_with_data(
+                name,
+                tag,
+                Default::default(),
+                Default::default(),
+                unwrap!(client.public_bls_key()),
+            );
+
+            client
+                .put_seq_mutable_data(data.clone())
+                .and_then(move |_| {
+                    client2.delete_mdata(mdataref).map(move |result| {
+                        assert_eq!(result, ());
+                    })
+                })
+                .and_then(move |_| client3.get_seq_mdata(XorName(*data.name()), data.tag()))
+                .then(|res| res)
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    pub fn del_unseq_mdata_test() {
+        let _ = random_client(move |client| {
+            let client2 = client.clone();
+            let client3 = client.clone();
+            let name = rand::random();
+            let tag = 15001;
+            let mdataref = MutableDataRef::new(name, tag);
+            let data = UnseqMutableData::new_with_data(
+                name,
+                tag,
+                Default::default(),
+                Default::default(),
+                unwrap!(client.public_bls_key()),
+            );
+
+            client
+                .put_unseq_mutable_data(data.clone())
+                .and_then(move |_| {
+                    client2.delete_mdata(mdataref).map(move |result| {
+                        assert_eq!(result, ());
+                    })
+                })
+                .and_then(move |_| client3.get_unseq_mdata(XorName(*data.name()), data.tag()))
+                .then(|res| res)
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    pub fn del_unseq_mdata_permission_test() {
+        let name = rand::random();
+        let tag = 15001;
+        let mdataref = MutableDataRef::new(name, tag);
+
+        random_client(move |client| {
+            let data = UnseqMutableData::new_with_data(
+                name,
+                tag,
+                Default::default(),
+                Default::default(),
+                unwrap!(client.public_bls_key()),
+            );
+
+            client.put_unseq_mutable_data(data.clone()).then(|res| res)
+        });
+
+        random_client(move |client1| client1.delete_mdata(mdataref).map_err(CoreError::from));
     }
 }
