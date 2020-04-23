@@ -22,6 +22,7 @@ use safe_nd::{
     HandshakeRequest, HandshakeResponse, Message, MessageId, NodePublicId, PublicId, Request,
     RequestType, Response,
 };
+use std::fmt::{self, Display, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
     collections::HashMap,
@@ -156,7 +157,10 @@ impl Bootstrapping {
                 return Transition::ToJoining(pending_elders);
             }
             Ok(_msg) => error!("Unexpected message type, expected challenge."),
-            Err(e) => error!("Unexpected error {:?}", e),
+            Err(e) => error!(
+                "Client: State::Bootstrapping. Deserialization error: {:?}",
+                e
+            ),
         }
 
         Transition::None
@@ -261,7 +265,7 @@ impl Joining {
                 //
             }
             Ok(_msg) => error!("Unexpected message type, expected challenge."),
-            Err(e) => error!("Unexpected error {:?}", e),
+            Err(e) => error!("Client: State::Joining. Deserialization error: {:?}", e),
         }
 
         Transition::None
@@ -376,7 +380,7 @@ impl Connected {
             }
             Ok(_msg) => error!("Unexpected message type, expected response."),
             Err(e) => {
-                error!("Unexpected error: {:?}", e);
+                error!("Client State::Connected. Deserialization error: {:?}", e);
             }
         }
 
@@ -402,6 +406,18 @@ enum State {
     Joining(Joining),
     Connected(Connected),
     Terminated,
+}
+
+impl Display for State {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        let state = match self {
+            State::Bootstrapping(_) => "State::Bootstrapping",
+            State::Joining(_) => "State::Joining",
+            State::Connected(_) => "State::Connected",
+            State::Terminated => "State::Terminated",
+        };
+        fmt.write_str(state)
+    }
 }
 
 enum Transition {
@@ -472,8 +488,11 @@ impl State {
         match self {
             State::Joining(state) => state.handle_connected_to(quic_p2p, peer),
             // This message is not expected for the rest of states
-            _state => {
-                warn!("handle_connected_to called for invalid state");
+            state => {
+                warn!(
+                    "{} - handle_connected_to called for invalid state - {:?}",
+                    &state, &peer
+                );
             }
         }
     }
@@ -582,28 +601,48 @@ impl Inner {
 
     fn handle_unsent_user_message(&mut self, peer_addr: SocketAddr, msg: &Bytes, token: Token) {
         // TODO: check if we have handled the challenge?
+        info!(
+            "{} - Could not send user message to {:?}.",
+            &self.state, &peer_addr
+        );
 
-        match deserialize(msg) {
-            Ok(Message::Request {
-                request,
-                message_id,
-                ..
-            }) => self.handle_unsent_request(peer_addr, request, message_id, token),
-            Ok(_) => println!("Unexpected message type"),
-            Err(e) => println!("Unexpected error {:?}", e),
+        match deserialize(&msg) {
+            Ok(Message::Request { .. }) => info!("Message is a request"),
+            Ok(Message::Response { .. }) => info!("Message is a response"),
+            Ok(_) => info!("Poda"),
+            Err(e) => info!(
+                "Error deserializing unsent message into Message type: {:?}",
+                e
+            ),
         }
+
+        match deserialize(&msg) {
+            Ok(HandshakeRequest::Bootstrap(_)) => {
+                info!("Message is a HandshakeRequest::Bootstrap. Let's try again.");
+            }
+            Ok(HandshakeRequest::ChallengeResult(_)) => {
+                info!("Message is a HandshakeRequest::ChallengeResult")
+            }
+            Ok(HandshakeRequest::Join(_)) => info!("Message is a Handshake request::Join"),
+            Err(e) => info!(
+                "Error deserializing unsent message into HandshakeRequest type: {:?}",
+                e
+            ),
+        }
+        self.quic_p2p
+            .send(Peer::Node(peer_addr), msg.clone(), token);
     }
 
-    fn handle_unsent_request(
-        &mut self,
-        _peer_addr: SocketAddr,
-        _request: Request,
-        _message_id: MessageId,
-        _token: Token,
-    ) {
-        trace!("{}: Not sent user message", self.id);
-        // TODO: unimplemented
-    }
+    // fn handle_unsent_request(
+    //     &mut self,
+    //     _peer_addr: SocketAddr,
+    //     _request: Request,
+    //     _message_id: MessageId,
+    //     _token: Token,
+    // ) {
+    //     trace!("{}: Not sent user message", self.id);
+    //     // TODO: unimplemented
+    // }
 
     fn handle_connection_failure(&mut self, peer_addr: SocketAddr, err: QuicP2pError) {
         if let QuicP2pError::ConnectionCancelled = err {
