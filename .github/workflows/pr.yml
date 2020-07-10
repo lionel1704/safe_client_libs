@@ -60,7 +60,7 @@ jobs:
           override: true
 
       # Use dedicated action for starting a baby fleming section
-      - uses: actions/start-local-safe-network-action@v1
+      - uses: maidsafe/start-local-safe-network-action@v1
         with:
           vault-version: '${{env.SAFE_VAULT_VERSION}}'
           cli-version: '${{env.SAFE_CLI_VERSION}}'
