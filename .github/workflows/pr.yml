@@ -8,75 +8,133 @@ env:
   RUST_BACKTRACE: 1
   # Deny all compiler warnings.
   RUSTFLAGS: "-D warnings"
+  SAFE_CLI_VERSION: "latest"
+  SAFE_VAULT_VERSION: "latest"
 
 jobs:
   clippy:
     name: Rustfmt-Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      # Install Rust and required components
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
           components: rustfmt, clippy
-      # Check if the code is formatted correctly.
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
       # Cache.
-      - name: Cache cargo registry
-        uses: actions/cache@v1
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo index
-        uses: actions/cache@v1
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo build
-        uses: actions/cache@v1
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+
+      # Check if the code is formatted correctly.
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
       # Run Clippy.
       - shell: bash
         run: ./scripts/clippy-all
 
-  # Run `cargo build` in the root directory to test all build scripts.
-  build-script:
-    name: Build Scripts
+  coverage:
+    name: Code coverage check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      # Install Rust and required components
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
+
+      # Use dedicated action for starting a baby fleming section
+      - uses: actions/start-local-safe-network-action@v1
+        with:
+          vault-version: '${{env.SAFE_VAULT_VERSION}}'
+          cli-version: '${{env.SAFE_CLI_VERSION}}'
+
+      - name: Check Safe Versions
+        run : |
+          $HOME/.safe/authd/safe-authd -V
+          $HOME/.safe/vault/safe_vault -V
+          safe --version
+
+      - name: Start Baby Fleming Network
+        run: safe vault run-baby-fleming
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
       # Cache.
-      - name: Cache cargo registry
-        uses: actions/cache@v1
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo index
-        uses: actions/cache@v1
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+
+      # Run cargo tarpaulin & push result to coveralls.io
+      - name: rust-tarpaulin code coverage check
+        uses: actions-rs/tarpaulin@master
         with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo build
-        uses: actions/cache@v1
+          args: '-v -t 10000 --release --out Lcov'
+      - name: Push code coverage results to coveralls.io
+        uses: coverallsapp/github-action@master
         with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          parallel: true
+          path-to-lcov: ./lcov.info
+      - name: Coveralls Finished
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          parallel-finished: true
+  
+  # Run `cargo build` in the root directory to test all build scripts.
+  build-script:
+    name: Build Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      # Install Rust
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
+      # Cache.
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+
       # Test build scripts.
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
+      - name: Build
+        run: cargo build
 
   build-ios:
     name: Build iOS
@@ -85,7 +143,8 @@ jobs:
       matrix:
         component: [safe_authenticator_ffi]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      # Install Rust
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -99,28 +158,23 @@ jobs:
           override: true
           target: x86_64-apple-ios
 
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
       # Cache.
-      - name: Cache cargo registry
-        uses: actions/cache@v1
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo index
-        uses: actions/cache@v1
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo build
-        uses: actions/cache@v1
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
 
       # Install cargo-lipo for universal iOS libs.
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-lipo
+      - name: Install cargo-lipo
+        run: cargo install cargo-lipo
 
       # Build prod libraries.
       - name: Build universal lib - prod
@@ -131,6 +185,7 @@ jobs:
         with:
           name: ${{ matrix.component }}-apple-ios-prod
           path: target/universal/release/lib${{ matrix.component }}.a
+
       # Build dev libs.
       - name: Build universal lib - dev
         shell: bash
@@ -149,7 +204,8 @@ jobs:
         target: [armv7-linux-androideabi, x86_64-linux-android]
         type: [dev, prod]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      # Install Rust
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -163,22 +219,19 @@ jobs:
         if: matrix.type == 'dev'
         run: echo ::set-output name=features::--features=mock-network
 
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
       # Cache.
-      - name: Cache cargo registry
-        uses: actions/cache@v1
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo index
-        uses: actions/cache@v1
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo build
-        uses: actions/cache@v1
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
 
       # Setup NDK build toolchain for arm.
       - if: matrix.target == 'armv7-linux-androideabi'
@@ -203,11 +256,8 @@ jobs:
 
       # Build safe_authenticator_ffi native lib.
       - name: build safe_authenticator_ffi
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --manifest-path=safe_authenticator_ffi/Cargo.toml --target=${{ matrix.target }} ${{ steps.set_dev_flag.outputs.features }}
-
+        run: cargo build --release --manifest-path=safe_authenticator_ffi/Cargo.toml --target=${{ matrix.target }} ${{ steps.set_dev_flag.outputs.features }}
+      
       # Upload safe_authenticator_ffi native lib.
       - name: upload safe_authenticator_ffi artifact
         uses: actions/upload-artifact@master
@@ -223,28 +273,28 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      # Install Rust
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
       # Cache.
-      - name: Cache cargo registry
-        uses: actions/cache@v1
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo index
-        uses: actions/cache@v1
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo build
-        uses: actions/cache@v1
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+
       # Run tests.
       - shell: bash
         run: ./scripts/test-mock && scripts/test-integration
@@ -255,13 +305,13 @@ jobs:
     name: Test Publish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      # Install Rust
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: publish
-          args: --manifest-path=safe_core/Cargo.toml --dry-run
+
+      - name: Publish Dry Run
+        run: cargo publish --manifest-path=safe_core/Cargo.toml --dry-run
