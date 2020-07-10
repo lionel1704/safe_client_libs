@@ -65,15 +65,6 @@ jobs:
           vault-version: '${{env.SAFE_VAULT_VERSION}}'
           cli-version: '${{env.SAFE_CLI_VERSION}}'
 
-      - name: Check Safe Versions
-        run : |
-          $HOME/.safe/authd/safe-authd -V
-          $HOME/.safe/vault/safe_vault -V
-          safe --version
-
-      - name: Start Baby Fleming Network
-        run: safe vault run-baby-fleming
-
       # Generate Cargo.lock, needed for the cache.
       - name: Generate Cargo.lock
         run: cargo generate-lockfile
