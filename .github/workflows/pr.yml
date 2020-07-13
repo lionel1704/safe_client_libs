@@ -32,12 +32,15 @@ jobs:
         with:
           vault-version: '${{env.SAFE_VAULT_VERSION}}'
           cli-version: '${{env.SAFE_CLI_VERSION}}'
+      
+      - run: ls /github/home/.safe/vault/baby-fleming-vaults
 
       - uses: actions/upload-artifact@v2
         name: Upload all vault data
         with:
           name: my-artifact
-          path: ~/.safe/vault/baby-fleming-vaults
+          path: /github/home/.safe/vault/baby-fleming-vaults
+      
 
       # Generate Cargo.lock, needed for the cache.
       - name: Generate Cargo.lock
