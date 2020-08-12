@@ -1463,8 +1463,8 @@ pub async fn attempt_bootstrap(
     }
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(any(test, feature = "testing"))]
+pub mod tests {
     use super::*;
     use crate::utils::{
         generate_random_vector,
@@ -1478,9 +1478,7 @@ mod tests {
     use unwrap::unwrap;
     use xor_name::XorName;
 
-    // Test putting and getting pub blob.
-    #[tokio::test]
-    async fn pub_blob_test() -> Result<(), CoreError> {
+    pub async fn pub_blob_test() -> Result<(), CoreError> {
         let client = random_client()?;
         // The `random_client()` initializes the client with 10 money.
         let start_bal = unwrap!(Money::from_str("10"));
@@ -1516,6 +1514,12 @@ mod tests {
         let fetched_data = client.get_blob(address).await?;
         assert_eq!(*fetched_data.address(), address);
         Ok(())
+    }
+
+    // Test putting and getting pub blob.
+    #[tokio::test]
+    pub async fn pub_blob_test() -> Result<(), CoreError> {
+        assert!(pub_blob_test().await.is_ok());
     }
 
     // Test putting, getting, and deleting unpub blob.
