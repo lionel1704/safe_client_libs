@@ -1768,7 +1768,7 @@ dependencies = [
 [[package]]
 name = "sn_transfers"
 version = "0.2.0"
-source = "git+https://github.com/maidsafe/sn_transfers.git#fffbf8ca19debfcbf36a212e184a273ae4ba1830"
+source = "git+https://github.com/yoga07/sn_transfers.git?branch=fix-signature#9eae0f5fa24c1667cc053567e611f0476160947c"
 dependencies = [
  "bincode",
  "crdts",
