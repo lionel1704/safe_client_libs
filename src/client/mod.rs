@@ -40,9 +40,9 @@ use futures::lock::Mutex;
 use log::{debug, info, trace, warn};
 use qp2p::Config as QuicP2pConfig;
 use rand::rngs::OsRng;
-use sn_data_types::{Keypair, PublicKey, Token};
+use sn_data_types::{Keypair, PublicKey, SectionElders, Token};
 use sn_messaging::{
-    client::{Cmd, DataCmd, Message, Query, QueryResponse},
+    client::{Cmd, DataCmd, ProcessMsg, Query, QueryResponse},
     MessageId,
 };
 use std::{
@@ -136,14 +136,25 @@ impl Client {
 
         let validator = ClientTransferValidator {};
 
+        let elder_pk_set = session
+            .section_key_set
+            .lock()
+            .await
+            .clone()
+            .ok_or(Error::NotBootstrapped)?;
+        let elder_names = session.get_elder_names().await;
+        let elders = SectionElders {
+            prefix: session
+                .section_prefix()
+                .await
+                .ok_or(Error::NoSectionPrefixKnown)?,
+            names: elder_names,
+            key_set: elder_pk_set,
+        };
+
         let transfer_actor = Arc::new(Mutex::new(SafeTransferActor::new(
             keypair.clone(),
-            session
-                .section_key_set
-                .lock()
-                .await
-                .clone()
-                .ok_or(Error::NotBootstrapped)?,
+            elders,
             validator,
         )));
 
@@ -227,35 +238,35 @@ impl Client {
         debug!("Sending QueryRequest: {:?}", query);
 
         let message = self.create_query_message(query).await?;
-
-        ConnectionManager::send_query(&message, &self.session).await
+        ConnectionManager::send_query(message, &self.session).await
     }
 
     // Build and sign Cmd Message Envelope
-    pub(crate) async fn create_cmd_message(&self, msg_contents: Cmd) -> Result<Message, Error> {
+    pub(crate) async fn create_cmd_message(&self, msg_contents: Cmd) -> Result<ProcessMsg, Error> {
         let id = MessageId::new();
         trace!("Creating cmd message with id: {:?}", id);
 
         let target_section_pk = Some(self.session.section_key().await?);
 
-        Ok(Message::Cmd {
+        Ok(ProcessMsg::Cmd {
             cmd: msg_contents,
             id,
-            target_section_pk,
         })
     }
 
     // Build a Query
-    pub(crate) async fn create_query_message(&self, msg_contents: Query) -> Result<Message, Error> {
+    pub(crate) async fn create_query_message(
+        &self,
+        msg_contents: Query,
+    ) -> Result<ProcessMsg, Error> {
         let id = MessageId::new();
         trace!("Creating query message with id : {:?}", id);
 
         let target_section_pk = Some(self.session.section_key().await?);
 
-        Ok(Message::Query {
+        Ok(ProcessMsg::Query {
             query: msg_contents,
             id,
-            target_section_pk,
         })
     }
 
@@ -272,7 +283,7 @@ impl Client {
         };
         let message = self.create_cmd_message(msg_contents).await?;
 
-        let _ = ConnectionManager::send_cmd(&message, &self.session).await?;
+        let _ = ConnectionManager::send_cmd(message, &self.session).await?;
 
         self.apply_write_payment_to_local_actor(payment_proof).await
     }

@@ -80,9 +80,9 @@ impl Client {
         let public_key = pk.unwrap_or(self.public_key().await);
 
         let msg_contents = Query::Transfer(TransferQuery::GetBalance(public_key));
-
         let message = self.create_query_message(msg_contents).await?;
-        let res = ConnectionManager::send_query(&message, &self.session).await?;
+
+        let res = ConnectionManager::send_query(message, &self.session).await?;
 
         match res {
             QueryResponse::GetBalance(balance) => balance.map_err(Error::from),
@@ -169,9 +169,8 @@ impl Client {
                 signed_credit: signed_transfer.credit.clone(),
             }))?;
 
-        let transfer_proof: TransferAgreementProof = self
-            .await_validation(&message, signed_transfer.id())
-            .await?;
+        let transfer_proof: TransferAgreementProof =
+            self.await_validation(message, signed_transfer.id()).await?;
 
         // Register the transfer on the network.
         let msg_contents = Cmd::Transfer(TransferCmd::RegisterTransfer(transfer_proof.clone()));
@@ -181,8 +180,7 @@ impl Client {
             "Transfer proof received and to be sent in RegisterTransfer req: {:?}",
             transfer_proof
         );
-
-        let _ = ConnectionManager::send_cmd(&message, &self.session).await?;
+        let _ = ConnectionManager::send_cmd(message, &self.session).await?;
 
         let mut actor = self.transfer_actor.lock().await;
         // First register with local actor, then reply.

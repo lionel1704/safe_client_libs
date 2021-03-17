@@ -221,8 +221,7 @@ impl Client {
             payment: payment_proof.clone(),
         };
         let message = self.create_cmd_message(msg_contents).await?;
-
-        let _ = ConnectionManager::send_cmd(&message, &self.session).await?;
+        let _ = ConnectionManager::send_cmd(message, &self.session).await?;
 
         self.apply_write_payment_to_local_actor(payment_proof).await
     }

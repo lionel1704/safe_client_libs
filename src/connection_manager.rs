@@ -16,7 +16,7 @@ use log::{debug, error, info, trace, warn};
 use qp2p::{self, Config as QuicP2pConfig, Endpoint, IncomingMessages, QuicP2p};
 use sn_data_types::{Keypair, PublicKey, Signature, TransferValidated};
 use sn_messaging::{
-    client::{Event, Message, QueryResponse},
+    client::{Event, Message, ProcessMsg, QueryResponse},
     section_info::{
         Error as SectionInfoError, GetSectionResponse, Message as SectionInfoMsg, SectionInfo,
     },
@@ -24,7 +24,7 @@ use sn_messaging::{
 };
 use std::{
     borrow::Borrow,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     net::SocketAddr,
     sync::Arc,
 };
@@ -34,7 +34,7 @@ use tokio::{
     sync::mpsc::{channel, Sender, UnboundedSender},
     task::JoinHandle,
 };
-use xor_name::XorName;
+use xor_name::{Prefix, XorName};
 
 static NUMBER_OF_RETRIES: usize = 3;
 pub static STANDARD_ELDERS_COUNT: usize = 5;
@@ -96,7 +96,7 @@ impl ConnectionManager {
 
     /// Send a `Message` to the network without awaiting for a response.
     pub async fn send_cmd(
-        msg: &Message,
+        msg: ProcessMsg,
         session: &Session,
         // endpoint: Endpoint,
         // elders: Vec<SocketAddr>,
@@ -104,7 +104,7 @@ impl ConnectionManager {
         let msg_id = msg.id();
         let endpoint = session.endpoint()?.clone();
 
-        let elders: Vec<SocketAddr> = session.elders.lock().await.iter().cloned().collect();
+        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
 
         // let pending_queries = session.pending_queries.clone();
 
@@ -115,7 +115,15 @@ impl ConnectionManager {
             msg,
             msg_id
         );
-        let msg_bytes = msg.serialize()?;
+
+        let msg = Message::Process(msg);
+        let section_pk = session
+            .section_key()
+            .await?
+            .bls()
+            .ok_or(Error::NoBlsSectionKey)?;
+        let dest_section_name = XorName::from(session.client_public_key());
+        let msg_bytes = msg.serialize(dest_section_name, section_pk)?;
 
         // Send message to all Elders concurrently
         let mut tasks = Vec::default();
@@ -167,7 +175,7 @@ impl ConnectionManager {
 
     /// Send a transfer validation message to all Elder without awaiting for a response.
     pub async fn send_transfer_validation(
-        msg: &Message,
+        msg: ProcessMsg,
         sender: Sender<Result<TransferValidated, Error>>,
         session: &Session,
     ) -> Result<(), Error> {
@@ -177,11 +185,18 @@ impl ConnectionManager {
             msg.id()
         );
         let endpoint = session.endpoint()?.clone();
-        let elders: Vec<SocketAddr> = session.elders.lock().await.iter().cloned().collect();
+        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
 
         let pending_transfers = session.pending_transfers.clone();
 
-        let msg_bytes = msg.serialize()?;
+        let section_pk = session
+            .section_key()
+            .await?
+            .bls()
+            .ok_or(Error::NoBlsSectionKey)?;
+        let dest_section_name = XorName::from(session.client_public_key());
+        let msg = Message::Process(msg);
+        let msg_bytes = msg.serialize(dest_section_name, section_pk)?;
 
         let msg_id = msg.id();
 
@@ -217,14 +232,23 @@ impl ConnectionManager {
     }
 
     /// Send a Query `Message` to the network awaiting for the response.
-    pub async fn send_query(msg: &Message, session: &Session) -> Result<QueryResponse, Error> {
+    pub async fn send_query(msg: ProcessMsg, session: &Session) -> Result<QueryResponse, Error> {
         let endpoint = session.endpoint()?.clone();
-        let elders: Vec<SocketAddr> = session.elders.lock().await.iter().cloned().collect();
+        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
 
         let pending_queries = session.pending_queries.clone();
 
         info!("sending query message {:?} w/ id: {:?}", msg, msg.id());
-        let msg_bytes = msg.serialize()?;
+
+        let msg = Message::Process(msg);
+        let section_pk = session
+            .section_key()
+            .await?
+            .bls()
+            .ok_or(Error::NoBlsSectionKey)?;
+        let dest_section_name = XorName::from(session.client_public_key());
+
+        let msg_bytes = msg.serialize(dest_section_name, section_pk)?;
 
         // We send the same message to all Elders concurrently,
         // and we try to find a majority on the responses
@@ -448,12 +472,17 @@ impl ConnectionManager {
             debug!("Already attempting elder connections, dropping get_section call until that is complete.");
             return Ok(session);
         }
-        let elders: Vec<SocketAddr> = session.elders.lock().await.iter().cloned().collect();
+        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
 
         // 1. We query the network for section info.
         trace!("Querying for section info from bootstrapped node...");
-        let msg = SectionInfoMsg::GetSectionQuery(XorName::from(session.client_public_key()))
-            .serialize()?;
+
+        // HACK: we don't know our section PK. We must supply a pk for now we do a random one...
+        let random_section_pk = threshold_crypto::SecretKey::random().public_key();
+        let dest_section_name = XorName::from(session.client_public_key());
+
+        let msg = SectionInfoMsg::GetSectionQuery(session.client_public_key())
+            .serialize(dest_section_name, random_section_pk)?;
 
         if let Some(bootstrapped_peer) = initial_peer {
             trace!("Bootstrapping with contact... {:?}", bootstrapped_peer);
@@ -498,7 +527,7 @@ impl ConnectionManager {
             peers.len()
         );
 
-        for peer_addr in peers {
+        for (name, peer_addr) in peers {
             let endpoint = endpoint.clone();
             let msg = msg.clone();
             let task_handle = tokio::spawn(async move {
@@ -516,7 +545,7 @@ impl ConnectionManager {
                         attempts, peer_addr, connected
                     );
 
-                    result = Ok(peer_addr)
+                    result = Ok((name, peer_addr))
                 }
 
                 result
@@ -527,7 +556,7 @@ impl ConnectionManager {
         // TODO: Do we need a timeout here to check sufficient time has passed + or sufficient connections?
         let mut has_sufficent_connections = false;
         let mut todo = tasks;
-        let mut elders = HashSet::new();
+        let mut elders = BTreeMap::new();
 
         while !has_sufficent_connections {
             if todo.is_empty() {
@@ -548,9 +577,9 @@ impl ConnectionManager {
                     warn!("Failed to connect to Elder @ : {}", err);
                 });
 
-                if let Ok(socket_addr) = res {
-                    info!("Connected to elder: {:?}", socket_addr);
-                    let _ = elders.insert(socket_addr);
+                if let Ok((name, socket)) = res {
+                    info!("Connected to elder: {:?}", socket);
+                    let _ = elders.insert(name, socket);
                 }
             }
 
@@ -599,12 +628,11 @@ impl ConnectionManager {
                 }
                 Ok(session)
             }
-            SectionInfoMsg::GetSectionResponse(GetSectionResponse::Redirect(addresses)) => {
+            SectionInfoMsg::GetSectionResponse(GetSectionResponse::Redirect(elders)) => {
                 trace!("GetSectionResponse::Redirect, trying with provided elders");
                 {
                     let mut session_elders = session.elders.lock().await;
-
-                    *session_elders = addresses.iter().copied().collect();
+                    let temp_xorname = *session_elders = elders.iter().copied().collect();
                 }
 
                 Ok(session)
@@ -635,29 +663,30 @@ impl ConnectionManager {
             original_elders = session.elders.lock().await.clone();
         }
 
-        let elders = &info.elders;
+        let received_elders = info.elders.clone();
 
         // Obtain the addresses of the Elders
-        trace!("Updating session info! Elders: ({:?})", elders);
-        let elders_addrs: HashSet<SocketAddr> = elders
-            .iter()
-            .map(|(_, socket_addr)| socket_addr)
-            .copied()
-            .collect();
+        trace!("Updating session info! Elders: ({:?})", received_elders);
 
         {
+            /// Update session key set
             let mut keyset = session.section_key_set.lock().await;
             *keyset = Some(info.pk_set.clone());
         }
-        // let session_elders;
-        {
-            let mut session_elders = session.elders.lock().await;
 
-            // clear existing elder list.
-            *session_elders = elders_addrs.clone();
+        {
+            // update section prefix
+            let mut prefix = session.section_prefix.lock().await;
+            *prefix = Some(info.prefix);
         }
 
-        if original_elders != elders_addrs {
+        {
+            // Update session elders
+            let mut session_elders = session.elders.lock().await;
+            *session_elders = received_elders.clone();
+        }
+
+        if original_elders != received_elders {
             debug!(">>>>>>>>>>>>>>>>>>>");
             debug!(">>>>>>>>>>>>>>>>>>>");
             debug!(">>>>>>>>>>>>>>>>>>>");
@@ -670,10 +699,10 @@ impl ConnectionManager {
     }
 
     /// Handle messages intended for client consumption (re: queries + commands)
-    async fn handle_client_msg(msg: Message, src: SocketAddr, session: Session) -> Session {
+    async fn handle_client_msg(msg: ProcessMsg, src: SocketAddr, session: Session) -> Session {
         let notifier = session.notifier.clone();
         match msg.clone() {
-            Message::QueryResponse {
+            ProcessMsg::QueryResponse {
                 response,
                 correlation_id,
                 ..
@@ -695,7 +724,7 @@ impl ConnectionManager {
                     );
                 }
             }
-            Message::Event {
+            ProcessMsg::Event {
                 event,
                 correlation_id,
                 ..
@@ -716,7 +745,7 @@ impl ConnectionManager {
                     }
                 }
             }
-            Message::CmdError {
+            ProcessMsg::CmdError {
                 error,
                 correlation_id,
                 ..
@@ -750,8 +779,9 @@ pub struct Session {
     pub pending_queries: PendingQueryResponses,
     pub pending_transfers: PendingTransferValidations,
     pub endpoint: Option<Endpoint>,
-    pub elders: Arc<Mutex<HashSet<SocketAddr>>>,
+    pub elders: Arc<Mutex<BTreeMap<XorName, SocketAddr>>>,
     pub section_key_set: Arc<Mutex<Option<PublicKeySet>>>,
+    pub section_prefix: Arc<Mutex<Option<Prefix>>>,
     pub signer: Signer,
     pub is_connecting_to_new_elders: bool,
 }
@@ -772,14 +802,27 @@ impl Session {
             pending_transfers: Arc::new(Mutex::new(HashMap::default())),
             endpoint: None,
             section_key_set: Arc::new(Mutex::new(None)),
-            elders: Arc::new(Mutex::new(HashSet::default())),
+            elders: Arc::new(Mutex::new(Default::default())),
+            section_prefix: Arc::new(Mutex::new(None)),
             signer,
             is_connecting_to_new_elders: false,
         })
     }
 
+    pub async fn get_elder_names(&self) -> BTreeSet<XorName> {
+        let elders = self.elders.lock().await;
+        let mut names = BTreeSet::new();
+        elders.keys().map(|key| names.insert(key.clone()));
+        names
+    }
+
     pub fn client_public_key(&self) -> PublicKey {
         self.signer.public_key()
+    }
+
+    /// Get section's prefix
+    pub async fn section_prefix(&self) -> Option<Prefix> {
+        self.section_prefix.lock().await.clone()
     }
 
     pub fn endpoint(&self) -> Result<&Endpoint, Error> {
@@ -809,11 +852,18 @@ impl Session {
             .signer
             .sign(&serialize(&self.endpoint()?.socket_addr())?)
             .await?;
+
+        // TODO: Do we actually know our seciton PK here?
+
+        // Hack: This is jsut a random bls pk, we dont know our section as yet, but right now
+        // a target pk is needed on all msgs
+        let random_section_pk = threshold_crypto::SecretKey::random().public_key();
+        let dest_section_name = XorName::from(self.client_public_key());
         SectionInfoMsg::RegisterEndUserCmd {
             end_user: self.client_public_key(),
             socketaddr_sig,
         }
-        .serialize()
+        .serialize(dest_section_name, random_section_pk)
         .map_err(Error::MessagingProtocol)
     }
 
@@ -832,7 +882,7 @@ impl Session {
                 warn!("Message received at listener from {:?}", &src);
                 let session_clone = session.clone();
                 session = match message_type {
-                    MessageType::SectionInfo(msg) => {
+                    MessageType::SectionInfo { msg, .. } => {
                         match ConnectionManager::handle_sectioninfo_msg(msg, session).await {
                             Ok(session) => session,
                             Err(error) => {
@@ -843,8 +893,18 @@ impl Session {
                             }
                         }
                     }
-                    MessageType::ClientMessage(msg) => {
-                        ConnectionManager::handle_client_msg(msg, src, session).await
+                    MessageType::ClientMessage { msg, .. } => {
+                        match msg {
+                            Message::Process(msg) => {
+                                ConnectionManager::handle_client_msg(msg, src, session).await
+                            }
+                            Message::ProcessingError(error) => {
+                                warn!("Processing error received. {:?}", error);
+                                // TODO: Handle lazy message errors
+
+                                session
+                            }
+                        }
                     }
                     msg_type => {
                         warn!("Unexpected message type received: {:?}", msg_type);
