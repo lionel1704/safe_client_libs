@@ -66,7 +66,7 @@ impl ConnectionManager {
         let (
             endpoint,
             _incoming_connections,
-            incoming_messages,
+            mut incoming_messages,
             _disconnections,
             bootstrapped_peer,
         ) = session.qp2p.bootstrap().await?;
@@ -74,22 +74,32 @@ impl ConnectionManager {
         session.endpoint = Some(endpoint.clone());
 
         // Bootstrap and send a handshake request to
-        let session = Self::get_section(session, Some(bootstrapped_peer)).await?;
+        session = Self::get_section(session, Some(bootstrapped_peer)).await?;
+        let mut we_have_keyset = false;
+        while !we_have_keyset {
+            session = if let Some((src, msg)) = incoming_messages.next().await {
+                let message_type = WireMsg::deserialize(msg)?;
+                warn!("Message received at listener from {:?}", &src);
+                if let MessageType::SectionInfo { msg, .. } = message_type {
+                    ConnectionManager::handle_sectioninfo_msg(msg, session).await?
+                } else {
+                    return Err(Error::Bootstrap(
+                        "Received invalid response to Section Query".to_string(),
+                    ));
+                }
+            } else {
+                return Err(Error::Bootstrap(
+                    "Incoming messages listener closed".to_string(),
+                ));
+            };
+            we_have_keyset = session.section_key_set.lock().await.is_some();
+        }
         let session = session
             .listen_to_incoming_messages(incoming_messages)
             .await?;
 
         // Let's now connect to all Elders
         let session = Self::connect_to_elders(session).await?;
-
-        let mut we_have_keyset = false;
-
-        // bootstrap is not complete until we have pk set...
-        while !we_have_keyset {
-            use tokio::time::{sleep, Duration};
-            sleep(Duration::from_millis(500)).await;
-            we_have_keyset = session.section_key_set.lock().await.is_some();
-        }
 
         Ok(session)
     }

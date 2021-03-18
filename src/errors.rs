@@ -132,6 +132,9 @@ pub enum Error {
     /// Bincode error
     #[error(transparent)]
     Serialisation(#[from] Box<bincode::ErrorKind>),
+    /// Bootstrap error
+    #[error("Error while bootstrapping: {0}")]
+    Bootstrap(String),
 }
 
 impl From<CmdError> for Error {
