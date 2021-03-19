@@ -8,7 +8,7 @@
 
 use crate::{
     client::Client,
-    connection_manager::{ConnectionManager, STANDARD_ELDERS_COUNT},
+    connection_manager::STANDARD_ELDERS_COUNT,
     errors::Error,
 };
 use bincode::serialize;
@@ -145,7 +145,7 @@ impl Client {
         let message = self.create_query_message(msg_contents).await?;
 
         // This is a normal response manager request. We want quorum on this for now...
-        let res = ConnectionManager::send_query(message, &self.session).await?;
+        let res = self.session.send_query(message).await?;
 
         let history = match res {
             QueryResponse::GetHistory(history) => history.map_err(Error::from),
@@ -194,7 +194,7 @@ impl Client {
 
         // This is a normal response manager request. We want quorum on this for now...
 
-        let res = ConnectionManager::send_query(message, &self.session).await?;
+        let res = self.session.send_query(message).await?;
 
         match res {
             QueryResponse::GetStoreCost(cost) => cost.map_err(Error::ErrorMessage),
@@ -262,7 +262,7 @@ impl Client {
         let (sender, mut receiver) = channel::<Result<TransferValidated, Error>>(7);
 
         let _ =
-            ConnectionManager::send_transfer_validation(msg.clone(), sender, &self.session).await?;
+            self.session.send_transfer_validation(msg.clone(), sender).await?;
 
         let mut returned_errors = vec![];
         let mut response_count = 0;
@@ -280,13 +280,7 @@ impl Client {
                                     ))?;
                                     info!("Transfer successfully validated.");
                                     if let Some(dap) = validation.proof {
-                                        let pending_transfers =
-                                            self.session.pending_transfers.clone();
-                                        let _ = ConnectionManager::remove_pending_transfer_sender(
-                                            &msg.id(),
-                                            pending_transfers,
-                                        )
-                                        .await?;
+                                        self.session.remove_pending_transfer_sender(&msg.id()).await?;
                                         return Ok(dap);
                                     }
                                 } else {
@@ -304,12 +298,7 @@ impl Client {
                         if returned_errors.len() > STANDARD_ELDERS_COUNT / 2 {
                             // TODO: Check + handle that errors are the same
                             let error = returned_errors.remove(0);
-                            let pending_transfers = self.session.pending_transfers.clone();
-                            if let Err(e) = ConnectionManager::remove_pending_transfer_sender(
-                                &msg.id(),
-                                pending_transfers,
-                            )
-                            .await
+                            if let Err(e) = self.session.remove_pending_transfer_sender(&msg.id()).await
                             {
                                 return Err(e);
                             } else {
@@ -326,10 +315,7 @@ impl Client {
             // at any point if we've had enough responses in, let's clean up
             if response_count >= STANDARD_ELDERS_COUNT {
                 // remove pending listener
-                let pending_transfers = self.session.pending_transfers.clone();
-                let _ =
-                    ConnectionManager::remove_pending_transfer_sender(&msg.id(), pending_transfers)
-                        .await?;
+                self.session.remove_pending_transfer_sender(&msg.id()).await?;
             }
         }
     }

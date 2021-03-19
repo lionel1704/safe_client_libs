@@ -24,7 +24,7 @@ use sn_messaging::{
 };
 use std::{
     borrow::Borrow,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     net::SocketAddr,
     sync::Arc,
 };
@@ -51,16 +51,13 @@ type QueryResponseSender = Sender<Result<QueryResponse, Error>>;
 type PendingTransferValidations = Arc<Mutex<HashMap<MessageId, TransferValidationSender>>>;
 type PendingQueryResponses = Arc<Mutex<HashMap<(SocketAddr, MessageId), QueryResponseSender>>>;
 
-/// Initialises `QuicP2p` instance which can bootstrap to the network, establish
-/// connections and send messages to several nodes, as well as await responses from them.
-pub struct ConnectionManager {}
 
-impl ConnectionManager {
+impl Session {
     /// Bootstrap to the network maintaining connections to several nodes.
-    pub async fn bootstrap(mut session: Session) -> Result<Session, Error> {
+    pub async fn bootstrap(&mut self) -> Result<(), Error> {
         trace!(
             "Trying to bootstrap to the network with public_key: {:?}",
-            session.client_public_key()
+            self.client_public_key()
         );
 
         let (
@@ -69,19 +66,19 @@ impl ConnectionManager {
             mut incoming_messages,
             _disconnections,
             bootstrapped_peer,
-        ) = session.qp2p.bootstrap().await?;
+        ) = self.qp2p.bootstrap().await?;
 
-        session.endpoint = Some(endpoint.clone());
+        self.endpoint = Some(endpoint.clone());
 
         // Bootstrap and send a handshake request to
-        session = Self::get_section(session, Some(bootstrapped_peer)).await?;
+        self.request_section_info(Some(bootstrapped_peer)).await?;
         let mut we_have_keyset = false;
         while !we_have_keyset {
-            session = if let Some((src, msg)) = incoming_messages.next().await {
+            if let Some((src, msg)) = incoming_messages.next().await {
                 let message_type = WireMsg::deserialize(msg)?;
                 warn!("Message received at listener from {:?}", &src);
                 if let MessageType::SectionInfo { msg, .. } = message_type {
-                    ConnectionManager::handle_sectioninfo_msg(msg, session).await?
+                    self.handle_sectioninfo_msg(msg).await?
                 } else {
                     return Err(Error::Bootstrap(
                         "Received invalid response to Section Query".to_string(),
@@ -92,29 +89,27 @@ impl ConnectionManager {
                     "Incoming messages listener closed".to_string(),
                 ));
             };
-            we_have_keyset = session.section_key_set.lock().await.is_some();
+            we_have_keyset = self.section_key_set.lock().await.is_some();
         }
-        let session = session
+        self
             .listen_to_incoming_messages(incoming_messages)
             .await?;
 
         // Let's now connect to all Elders
-        let session = Self::connect_to_elders(session).await?;
+        self.connect_to_elders().await?;
 
-        Ok(session)
+        Ok(())
     }
 
     /// Send a `Message` to the network without awaiting for a response.
     pub async fn send_cmd(
+        &self,
         msg: ProcessMsg,
-        session: &Session,
-        // endpoint: Endpoint,
-        // elders: Vec<SocketAddr>,
     ) -> Result<(), Error> {
         let msg_id = msg.id();
-        let endpoint = session.endpoint()?.clone();
+        let endpoint = self.endpoint()?;
 
-        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
+        let elders: Vec<SocketAddr> = self.elders.lock().await.values().cloned().collect();
 
         // let pending_queries = session.pending_queries.clone();
 
@@ -127,12 +122,12 @@ impl ConnectionManager {
         );
 
         let msg = Message::Process(msg);
-        let section_pk = session
+        let section_pk = self
             .section_key()
             .await?
             .bls()
             .ok_or(Error::NoBlsSectionKey)?;
-        let dest_section_name = XorName::from(session.client_public_key());
+        let dest_section_name = XorName::from(self.client_public_key());
         let msg_bytes = msg.serialize(dest_section_name, section_pk)?;
 
         // Send message to all Elders concurrently
@@ -172,11 +167,11 @@ impl ConnectionManager {
 
     /// Remove a pending transfer sender from the listener map
     pub async fn remove_pending_transfer_sender(
+        &self,
         msg_id: &MessageId,
-        pending_transfers: PendingTransferValidations,
     ) -> Result<(), Error> {
         trace!("Removing pending transfer sender");
-        let mut listeners = pending_transfers.lock().await;
+        let mut listeners = self.pending_transfers.lock().await;
         let _ = listeners
             .remove(msg_id)
             .ok_or(Error::NoTransferValidationListener)?;
@@ -185,26 +180,26 @@ impl ConnectionManager {
 
     /// Send a transfer validation message to all Elder without awaiting for a response.
     pub async fn send_transfer_validation(
+        &self,
         msg: ProcessMsg,
         sender: Sender<Result<TransferValidated, Error>>,
-        session: &Session,
     ) -> Result<(), Error> {
         info!(
             "Sending transfer validation command {:?} w/ id: {:?}",
             msg,
             msg.id()
         );
-        let endpoint = session.endpoint()?.clone();
-        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
+        let endpoint = self.endpoint()?;
+        let elders = self.elders.lock().await.values().cloned().collect::<Vec<_>>();
 
-        let pending_transfers = session.pending_transfers.clone();
+        let pending_transfers = self.pending_transfers.clone();
 
-        let section_pk = session
+        let section_pk = self
             .section_key()
             .await?
             .bls()
             .ok_or(Error::NoBlsSectionKey)?;
-        let dest_section_name = XorName::from(session.client_public_key());
+        let dest_section_name = XorName::from(self.client_public_key());
         let msg = Message::Process(msg);
         let msg_bytes = msg.serialize(dest_section_name, section_pk)?;
 
@@ -217,9 +212,8 @@ impl ConnectionManager {
 
         // Send message to all Elders concurrently
         let mut tasks = Vec::default();
-        for socket in elders.iter() {
+        for socket in elders {
             let msg_bytes_clone = msg_bytes.clone();
-            let socket = *socket;
 
             let endpoint = endpoint.clone();
 
@@ -242,21 +236,21 @@ impl ConnectionManager {
     }
 
     /// Send a Query `Message` to the network awaiting for the response.
-    pub async fn send_query(msg: ProcessMsg, session: &Session) -> Result<QueryResponse, Error> {
-        let endpoint = session.endpoint()?.clone();
-        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
+    pub async fn send_query(&self, msg: ProcessMsg) -> Result<QueryResponse, Error> {
+        let endpoint = self.endpoint()?;
+        let elders = self.elders.lock().await.values().cloned().collect::<Vec<_>>();
 
-        let pending_queries = session.pending_queries.clone();
+        let pending_queries = self.pending_queries.clone();
 
         info!("sending query message {:?} w/ id: {:?}", msg, msg.id());
 
         let msg = Message::Process(msg);
-        let section_pk = session
+        let section_pk = self
             .section_key()
             .await?
             .bls()
             .ok_or(Error::NoBlsSectionKey)?;
-        let dest_section_name = XorName::from(session.client_public_key());
+        let dest_section_name = XorName::from(self.client_public_key());
 
         let msg_bytes = msg.serialize(dest_section_name, section_pk)?;
 
@@ -391,7 +385,7 @@ impl ConnectionManager {
 
             // Second, let's handle no winner if we have > threshold responses.
             if !has_elected_a_response {
-                winner = Self::select_best_of_the_rest_response(
+                winner = select_best_of_the_rest_response(
                     winner,
                     threshold,
                     &vote_map,
@@ -409,126 +403,65 @@ impl ConnectionManager {
         winner.0.ok_or(Error::NoResponse)
     }
 
-    /// Choose the best response when no single responses passes the threshold
-    fn select_best_of_the_rest_response(
-        current_winner: (Option<QueryResponse>, usize),
-        threshold: usize,
-        vote_map: &VoteMap,
-        received_errors: usize,
-        has_elected_a_response: &mut bool,
-    ) -> (Option<QueryResponse>, usize) {
-        trace!("No response selected yet, checking if fallback needed");
-        let mut number_of_responses = 0;
-        let mut most_popular_response = current_winner;
-
-        for (_, (message, votes)) in vote_map.iter() {
-            number_of_responses += votes;
-            trace!(
-                "Number of votes cast :{:?}. Threshold is: {:?} votes",
-                number_of_responses,
-                threshold
-            );
-
-            number_of_responses += received_errors;
-
-            trace!(
-                "Total number of responses (votes and errors) :{:?}",
-                number_of_responses
-            );
-
-            if most_popular_response.0 == None {
-                most_popular_response = (Some(message.clone()), *votes);
-            }
-
-            if votes > &most_popular_response.1 {
-                trace!("Reselecting winner, with {:?} votes: {:?}", votes, message);
-
-                most_popular_response = (Some(message.clone()), *votes)
-            } else {
-                // TODO: check w/ farming we get a proper history returned w /matching responses.
-                if let QueryResponse::GetHistory(Ok(history)) = &message {
-                    // if we're not more popular but in simu payout mode, check if we have more history...
-                    if cfg!(feature = "simulated-payouts") && votes == &most_popular_response.1 {
-                        if let Some(QueryResponse::GetHistory(Ok(popular_history))) =
-                            &most_popular_response.0
-                        {
-                            if history.len() > popular_history.len() {
-                                trace!("GetHistory response received in Simulated Payouts... choosing longest history. {:?}", history);
-                                most_popular_response = (Some(message.clone()), *votes)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if number_of_responses > threshold {
-            trace!("No clear response above the threshold, so choosing most popular response with: {:?} votes: {:?}", most_popular_response.1, most_popular_response.0);
-            *has_elected_a_response = true;
-        }
-
-        most_popular_response
-    }
-
     // Private helpers
 
-    // Get section info. Optionally from one node (if we've just bootstrapped qp2p eg)
-    // Otherwise we use all session nodes
-    async fn get_section(
-        session: Session,
+    // Sends a request to get the latest section info. If we have just bootstrapped, the boostrapped
+    // peer should be passed to the function.
+    // If the section elders have changed we use all the elders to get the
+    // latest section info.
+    async fn request_section_info(
+        &self,
         initial_peer: Option<SocketAddr>,
-    ) -> Result<Session, Error> {
-        if session.is_connecting_to_new_elders {
-            debug!("Already attempting elder connections, dropping get_section call until that is complete.");
-            return Ok(session);
+    ) -> Result<(), Error> {
+        if self.is_connecting_to_new_elders {
+            debug!("Already attempting elder connections, dropping request_section_info call until that is complete.");
+            return Ok(());
         }
-        let elders: Vec<SocketAddr> = session.elders.lock().await.values().cloned().collect();
+        let elders: Vec<SocketAddr> = self.elders.lock().await.values().cloned().collect();
 
         // 1. We query the network for section info.
         trace!("Querying for section info from bootstrapped node...");
 
         // HACK: we don't know our section PK. We must supply a pk for now we do a random one...
         let random_section_pk = threshold_crypto::SecretKey::random().public_key();
-        let dest_section_name = XorName::from(session.client_public_key());
+        let dest_section_name = XorName::from(self.client_public_key());
 
-        let msg = SectionInfoMsg::GetSectionQuery(session.client_public_key())
+        let msg = SectionInfoMsg::GetSectionQuery(self.client_public_key())
             .serialize(dest_section_name, random_section_pk)?;
 
         if let Some(bootstrapped_peer) = initial_peer {
-            trace!("Bootstrapping with contact... {:?}", bootstrapped_peer);
+            trace!("Requesting section info from bootstrapped peer... {:?}", bootstrapped_peer);
 
-            session
+            self
                 .endpoint()?
                 .send_message(msg, &bootstrapped_peer)
                 .await?;
         } else {
-            trace!("Bootstrapping with contacts... {:?}", elders);
-            debug!(">>>>> connecting to session's elders");
-            for socket in elders.clone() {
+            trace!("Requesting section info from our elders... {:?}", elders);
+            for socket in elders {
                 let msg = msg.clone();
-                let endpoint = session.endpoint.clone().ok_or(Error::NotBootstrapped)?;
-                endpoint.connect_to(&socket).await?;
+                let endpoint = self.endpoint.clone().ok_or(Error::NotBootstrapped)?;
                 endpoint.send_message(msg, &socket).await?
             }
         }
 
-        Ok(session)
+        Ok(())
     }
 
     // Connect to a set of Elders nodes which will be
     // the receipients of our messages on the network.
-    async fn connect_to_elders(mut session: Session) -> Result<Session, Error> {
-        session.is_connecting_to_new_elders = true;
+    async fn connect_to_elders(&mut self) -> Result<(), Error> {
+        self.is_connecting_to_new_elders = true;
         // Connect to all Elders concurrently
         // We spawn a task per each node to connect to
         let mut tasks = Vec::default();
 
-        let endpoint = session.endpoint()?;
-        let msg = session.bootstrap_cmd().await?;
+        let endpoint = self.endpoint()?;
+        let msg = self.bootstrap_cmd().await?;
 
         let peers;
         {
-            peers = session.elders.lock().await.clone();
+            peers = self.elders.lock().await.clone();
         }
 
         debug!(
@@ -608,53 +541,52 @@ impl ConnectionManager {
 
         trace!("Connected to {} Elders.", elders.len());
         {
-            let mut session_elders = session.elders.lock().await;
+            let mut session_elders = self.elders.lock().await;
             *session_elders = elders;
         }
 
-        session.is_connecting_to_new_elders = false;
+        self.is_connecting_to_new_elders = false;
 
-        Ok(session)
+        Ok(())
     }
 
     /// Handle received network info messages
     async fn handle_sectioninfo_msg(
+        &mut self,
         msg: SectionInfoMsg,
-        mut session: Session,
-    ) -> Result<Session, Error> {
+    ) -> Result<(), Error> {
         trace!("Handling network info message {:?}", msg);
 
         match &msg {
             SectionInfoMsg::GetSectionResponse(GetSectionResponse::Success(info)) => {
                 debug!("GetSectionResponse::Success!");
-                ConnectionManager::update_session_info(session, info).await
+                self.update_session_info(info).await
             }
             SectionInfoMsg::RegisterEndUserError(error)
             | SectionInfoMsg::GetSectionResponse(GetSectionResponse::SectionInfoUpdate(error)) => {
                 error!("Message {:?} was interrupted due to {:?}. This will most likely need to be sent again.", msg, error);
                 if let SectionInfoError::TargetSectionInfoOutdated(info) = error {
                     trace!("Updated network info: ({:?})", info);
-                    session = ConnectionManager::update_session_info(session, info).await?;
+                    self.update_session_info(info).await?;
                 }
-                Ok(session)
+                Ok(())
             }
             SectionInfoMsg::GetSectionResponse(GetSectionResponse::Redirect(elders)) => {
                 trace!("GetSectionResponse::Redirect, trying with provided elders");
                 {
-                    let mut session_elders = session.elders.lock().await;
-                    let temp_xorname = *session_elders = elders.iter().copied().collect();
+                    // FIXME
                 }
 
-                Ok(session)
+                Ok(())
             }
             SectionInfoMsg::SectionInfoUpdate(update) => {
                 let correlation_id = update.correlation_id;
                 error!("MessageId {:?} was interrupted due to infrastructure updates. This will most likely need to be sent again. Update was : {:?}", correlation_id, update);
                 if let SectionInfoError::TargetSectionInfoOutdated(info) = update.clone().error {
                     trace!("Updated network info: ({:?})", info);
-                    session = ConnectionManager::update_session_info(session, &info).await?;
+                    self.update_session_info(&info).await?;
                 }
-                Ok(session)
+                Ok(())
             }
             SectionInfoMsg::RegisterEndUserCmd { .. } | SectionInfoMsg::GetSectionQuery(_) => {
                 Err(Error::UnexpectedMessageOnJoin(format!(
@@ -666,11 +598,11 @@ impl ConnectionManager {
     }
 
     /// Apply updated info to a network session, and trigger connections
-    async fn update_session_info(session: Session, info: &SectionInfo) -> Result<Session, Error> {
+    async fn update_session_info(&mut self, info: &SectionInfo) -> Result<(), Error> {
         let original_elders;
 
         {
-            original_elders = session.elders.lock().await.clone();
+            original_elders = self.elders.lock().await.clone();
         }
 
         let received_elders = info.elders.clone();
@@ -680,19 +612,19 @@ impl ConnectionManager {
 
         {
             /// Update session key set
-            let mut keyset = session.section_key_set.lock().await;
+            let mut keyset = self.section_key_set.lock().await;
             *keyset = Some(info.pk_set.clone());
         }
 
         {
             // update section prefix
-            let mut prefix = session.section_prefix.lock().await;
+            let mut prefix = self.section_prefix.lock().await;
             *prefix = Some(info.prefix);
         }
 
         {
             // Update session elders
-            let mut session_elders = session.elders.lock().await;
+            let mut session_elders = self.elders.lock().await;
             *session_elders = received_elders.clone();
         }
 
@@ -702,15 +634,15 @@ impl ConnectionManager {
             debug!(">>>>>>>>>>>>>>>>>>>");
             debug!(">>>>>>>>>>>>>>>>>>>");
             debug!(">>>>>>>>>>>>>>>>>>> There are new elders to connect to!");
-            Self::connect_to_elders(session).await
+            self.connect_to_elders().await
         } else {
-            Ok(session)
+            Ok(())
         }
     }
 
     /// Handle messages intended for client consumption (re: queries + commands)
-    async fn handle_client_msg(msg: ProcessMsg, src: SocketAddr, session: Session) -> Session {
-        let notifier = session.notifier.clone();
+    async fn handle_client_msg(&self, msg: ProcessMsg, src: SocketAddr) {
+        let notifier = self.notifier.clone();
         match msg.clone() {
             ProcessMsg::QueryResponse {
                 response,
@@ -719,7 +651,7 @@ impl ConnectionManager {
             } => {
                 trace!("Query response in: {:?}", response);
 
-                if let Some(sender) = session
+                if let Some(sender) = self
                     .pending_queries
                     .lock()
                     .await
@@ -740,7 +672,7 @@ impl ConnectionManager {
                 ..
             } => {
                 if let Event::TransferValidated { event, .. } = event {
-                    if let Some(sender) = session
+                    if let Some(sender) = self
                         .pending_transfers
                         .lock()
                         .await
@@ -760,7 +692,7 @@ impl ConnectionManager {
                 correlation_id,
                 ..
             } => {
-                if let Some(sender) = session
+                if let Some(sender) = self
                     .pending_transfers
                     .lock()
                     .await
@@ -778,9 +710,69 @@ impl ConnectionManager {
                 warn!("another message type received {:?}", msg);
             }
         };
-        session
     }
 }
+
+    /// Choose the best response when no single responses passes the threshold
+    fn select_best_of_the_rest_response(
+        current_winner: (Option<QueryResponse>, usize),
+        threshold: usize,
+        vote_map: &VoteMap,
+        received_errors: usize,
+        has_elected_a_response: &mut bool,
+    ) -> (Option<QueryResponse>, usize) {
+        trace!("No response selected yet, checking if fallback needed");
+        let mut number_of_responses = 0;
+        let mut most_popular_response = current_winner;
+
+        for (_, (message, votes)) in vote_map.iter() {
+            number_of_responses += votes;
+            trace!(
+                "Number of votes cast :{:?}. Threshold is: {:?} votes",
+                number_of_responses,
+                threshold
+            );
+
+            number_of_responses += received_errors;
+
+            trace!(
+                "Total number of responses (votes and errors) :{:?}",
+                number_of_responses
+            );
+
+            if most_popular_response.0 == None {
+                most_popular_response = (Some(message.clone()), *votes);
+            }
+
+            if votes > &most_popular_response.1 {
+                trace!("Reselecting winner, with {:?} votes: {:?}", votes, message);
+
+                most_popular_response = (Some(message.clone()), *votes)
+            } else {
+                // TODO: check w/ farming we get a proper history returned w /matching responses.
+                if let QueryResponse::GetHistory(Ok(history)) = &message {
+                    // if we're not more popular but in simu payout mode, check if we have more history...
+                    if cfg!(feature = "simulated-payouts") && votes == &most_popular_response.1 {
+                        if let Some(QueryResponse::GetHistory(Ok(popular_history))) =
+                            &most_popular_response.0
+                        {
+                            if history.len() > popular_history.len() {
+                                trace!("GetHistory response received in Simulated Payouts... choosing longest history. {:?}", history);
+                                most_popular_response = (Some(message.clone()), *votes)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if number_of_responses > threshold {
+            trace!("No clear response above the threshold, so choosing most popular response with: {:?} votes: {:?}", most_popular_response.1, most_popular_response.0);
+            *has_elected_a_response = true;
+        }
+
+        most_popular_response
+    }
 
 #[derive(Clone)]
 pub struct Session {
@@ -879,9 +871,9 @@ impl Session {
 
     /// Listen for incoming messages on a connection
     pub async fn listen_to_incoming_messages(
-        self,
+        &self,
         mut incoming_messages: IncomingMessages,
-    ) -> Result<Session, Error> {
+    ) -> Result<(), Error> {
         debug!("Adding IncomingMessages listener");
 
         let mut session = self.clone();
@@ -890,35 +882,30 @@ impl Session {
             while let Some((src, message)) = incoming_messages.next().await {
                 let message_type = WireMsg::deserialize(message)?;
                 warn!("Message received at listener from {:?}", &src);
-                let session_clone = session.clone();
-                session = match message_type {
+                match message_type {
                     MessageType::SectionInfo { msg, .. } => {
-                        match ConnectionManager::handle_sectioninfo_msg(msg, session).await {
-                            Ok(session) => session,
+                        match session.handle_sectioninfo_msg(msg).await {
+                            Ok(()) => (),
                             Err(error) => {
                                 error!("Error handling network info message: {:?}", error);
                                 // that's enough
                                 // go back to using a clone of session before the error
-                                session_clone
                             }
                         }
                     }
                     MessageType::ClientMessage { msg, .. } => {
                         match msg {
                             Message::Process(msg) => {
-                                ConnectionManager::handle_client_msg(msg, src, session).await
+                                session.handle_client_msg(msg, src).await
                             }
                             Message::ProcessingError(error) => {
                                 warn!("Processing error received. {:?}", error);
                                 // TODO: Handle lazy message errors
-
-                                session
                             }
                         }
                     }
                     msg_type => {
                         warn!("Unexpected message type received: {:?}", msg_type);
-                        session
                     }
                 };
             }
@@ -927,7 +914,7 @@ impl Session {
         });
 
         // Some or None, not super important if this existed before...
-        Ok(self)
+        Ok(())
     }
 }
 
