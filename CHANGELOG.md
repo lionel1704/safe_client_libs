@@ -2,6 +2,175 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.24.0](https://github.com/lionel1704/sn_client/compare/v0.9.1...v0.24.0) (2021-06-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* updating sn_messaging is a breaking change
+* sn_messaging bump to 35
+* sn_messaging bump non-backward compatible.
+* sn_messaging bump
+* **messaging:** sn_messaging updated
+
+Also expands some logging
+* **session:** removing the EndUser registration step from the boostrapping stage
+* **cicd:** This should be bumped with messaging changes
+
+This isn't _actually_ a breaking change, but a bump due to an earlier
+commit missing one.
+
+PRs starting with the title `Automated version bump` are auto generated as
+part of the CI/CD process and so it is duplicate work running the PR workflow
+on them. These changes skip PR CI for them.
+This PR also switches the scheduled security audit to only run on the MaidSafe
+org repo, not on forks.
+* **deps:** update sn_messaging version to 20.0.1
+* **deps:** the updated dependencies have breaking changes
+* **deps:** the qp2p update includes a breaking change
+* DT update. Messaging updates
+* **tokio:** new Tokio runtime version is not backward compatible with tokio versions < 1.
+* **api:** Policy mutation APIs are removed.
+* **deps:** new version of sn_messaging includes a breaking change
+* **deps:** updated sn_messaging version
+* rename money to token
+* This updates client creation, Arc<Keypair> is no longer
+needed, as they keypair itself contains the Arcs we need.
+
+### Features
+
+* add payment buffer for storecost fluctuations ([a4eecfa](https://github.com/lionel1704/sn_client/commit/a4eecfa035dca6b6c39e131f36b5204be6e7c0c6))
+* always reconnect to elders ([1a3afa3](https://github.com/lionel1704/sn_client/commit/1a3afa3117d5f44036b48bf6799f2695cc3dfd78))
+* discard blob errors if we get a positive one instead ([cc131a2](https://github.com/lionel1704/sn_client/commit/cc131a22e1d9cb177c6cd598810a50b22ade65be))
+* update sn_messaging ([1656625](https://github.com/lionel1704/sn_client/commit/165662508532ec343bcf367e53a8f4b1f54d128e))
+* update sn_messaging ([458ec64](https://github.com/lionel1704/sn_client/commit/458ec6471fd2e962e0b6b55679d92e048bc212fc))
+* **anti-entropy:** updates for sn_messaging new message enum ([5dfc53c](https://github.com/lionel1704/sn_client/commit/5dfc53cd4618affa63271bab88f59c954b8fcde1))
+* **api:** Add get_balance_for api for specificly PK requests ([78847f8](https://github.com/lionel1704/sn_client/commit/78847f8c3e289a87b9088be9f2d166ede11bfad1))
+* **api:** adding new Register data type API ([c567542](https://github.com/lionel1704/sn_client/commit/c567542a49dc728f2e208152093f454dc4907715))
+* **api:** expose Blob utility API to be able to generate a data map without needing to connect to the network ([817efee](https://github.com/lionel1704/sn_client/commit/817efee20a6d4ff3f1170d0c3142f71891389e79))
+* **api:** removing APIs that are meant for mutating Seuquence's Policy as they are now immutable ([9ad657b](https://github.com/lionel1704/sn_client/commit/9ad657b366b754c08772c2a446e7e9f7ceff57ea))
+* **apis:** remove get_seq/unseq_map apis, and go for cleaner get_map ([3b47500](https://github.com/lionel1704/sn_client/commit/3b4750082e9ea21193f098045ebac31a27d1dc03))
+* **arc:** Require an arc wrapped keypair for init ([38e7ef3](https://github.com/lionel1704/sn_client/commit/38e7ef32ac416336af853cf663a82d57b919c8c3))
+* **blob:** expose self_ecnrypt API for dry run ([d3abe53](https://github.com/lionel1704/sn_client/commit/d3abe53d28ee15c1cb758399153e6c6a91a52165))
+* **blob:** remove local blob cache ([8a1b871](https://github.com/lionel1704/sn_client/commit/8a1b871ebf70ce5ebcf8aaa9146705b29927f925))
+* **bootstrap:** update for changes to bootstrap flow ([5af7cbe](https://github.com/lionel1704/sn_client/commit/5af7cbe255722dd7ddcf1a7f7334e317aa7c03d6))
+* **ci:** auto generate dependency graph via CI ([ac13840](https://github.com/lionel1704/sn_client/commit/ac13840c0bcee2db67c38275b83eef2be3e3f24f))
+* **cicd:** exclude prs with title 'Automated version bump` ([1e28cf4](https://github.com/lionel1704/sn_client/commit/1e28cf40cbadc394d5ad73f21e91a45add039a60))
+* **config:** read config file from an optionally provided path ([8d8724b](https://github.com/lionel1704/sn_client/commit/8d8724ba8824d91bc38a16dd144311005698b249))
+* **conn:** make query response threhsold dynamic ([ebf310a](https://github.com/lionel1704/sn_client/commit/ebf310a38b9506f7241a4c7d4296ee0d14ed28f5))
+* **connection_manager:** improve handling of connections ([158ba06](https://github.com/lionel1704/sn_client/commit/158ba0690451e34ed5bdb10e7c771602b1b501fb))
+* **connections:** set up listener for events/errors ([deeecc6](https://github.com/lionel1704/sn_client/commit/deeecc62bb65e99663683f6b2712c1156420adbc))
+* **connections:** updates to listen to all messages from each elder ([76c1836](https://github.com/lionel1704/sn_client/commit/76c1836db1eda7cc98e99bdef3d3c336fa03ab7f))
+* **connMgr:** send queries to the 3 Elders closest to the name of target data ([94526ee](https://github.com/lionel1704/sn_client/commit/94526eede01c3722f671f7b41d43c88dc02cdb75))
+* **elders:** remove hard coded elder count ([41b986b](https://github.com/lionel1704/sn_client/commit/41b986ba38ca1b2a2ee3c4f130bad82b22c5d950))
+* **err_listener:** implement CmdError listener and fix map data tests ([b57ba9a](https://github.com/lionel1704/sn_client/commit/b57ba9ad2780b280dc884e609b423a091fc8296b))
+* **error:** re-export sn_messaging::Error as ErrorMessage on the public API ([e3829b0](https://github.com/lionel1704/sn_client/commit/e3829b0d5d00cc262ca69fef92a1670118162a52))
+* **errors:** add error for insufficient elder connections ([357ca33](https://github.com/lionel1704/sn_client/commit/357ca33290f3ab19edfbb3d08f6414004b5a142f))
+* **errors:** receive CmdErrors from the network ([ee194d5](https://github.com/lionel1704/sn_client/commit/ee194d58f9243e764e581d3f29c067e0bb4722c0))
+* **errors:** use thiserror for error creation ([bc093b6](https://github.com/lionel1704/sn_client/commit/bc093b6fc5cb43fe1bdfa8214e2f1907935e98a0))
+* **examples:** add a simple example using Blob API ([5c5e764](https://github.com/lionel1704/sn_client/commit/5c5e764e5052d00301e269d1ff9a27499f23feeb))
+* **listen:** Initial implementation of listen on network ([b38c9bf](https://github.com/lionel1704/sn_client/commit/b38c9bf922f0a10480e13c98076c6a8b2fa70f18))
+* **messaging:** Update sn_messaging ([19852a3](https://github.com/lionel1704/sn_client/commit/19852a343fc287269257a1895b81f659988465cd))
+* **rand:** use OsRng instead of thread ([437340a](https://github.com/lionel1704/sn_client/commit/437340af6736d47b1650f6054a3930c60acc298b))
+* **session:** make Sessions agnostic of the keypair used to sign each individual client message ([cbe16fd](https://github.com/lionel1704/sn_client/commit/cbe16fd8ea78bbf6ac44c99831f31ae21629420d))
+* **storecost:** handle updated query response ([aa47973](https://github.com/lionel1704/sn_client/commit/aa47973c78f602100567d5946929fa36975ded17))
+* add configurable bootstrap to client ([5ad120b](https://github.com/lionel1704/sn_client/commit/5ad120bfc7e734b543fafcb96acf877b32adaeb4))
+* Arc<Keypair>->Keypair updates to accommodate Dt and transfers ([dd23579](https://github.com/lionel1704/sn_client/commit/dd2357943f511a6fd90af837fea208bb1d9a4741))
+* instantiate the client w/ fullId not just sk ([79f064f](https://github.com/lionel1704/sn_client/commit/79f064f75e6b106ef3bc04357041b963303f0f9e))
+* listen for bootstrap response on IncomingMessages also ([f880f98](https://github.com/lionel1704/sn_client/commit/f880f9823e77b3727253f9dee01a304cc4e3eddd))
+* remove logging implementation ([cc320a0](https://github.com/lionel1704/sn_client/commit/cc320a04f01625f7a0e94d5c7df32e5d5d990fc8))
+* remove seq cache ([afc516b](https://github.com/lionel1704/sn_client/commit/afc516b6cb2e8ec0c54a9dc2232f21818ad802b8))
+* set simulated-payouts as a default feature for now ([de6b2c9](https://github.com/lionel1704/sn_client/commit/de6b2c93fc994e0166943199e991befee923df80))
+* update client default config for idle/keep alive time changes. ([547dbdd](https://github.com/lionel1704/sn_client/commit/547dbdd2c7e77b66c8cc5715961c9c68d0fceaf2))
+* update elder listeners when incoming messages available ([90f36ee](https://github.com/lionel1704/sn_client/commit/90f36eed6b98b5329f997a22b2c76518a2adc205))
+* update lseq data type ([b064eff](https://github.com/lionel1704/sn_client/commit/b064eff303f43c3f1f98d22c1b43aee8dba64b5c))
+* us our section pk when messaging ([c917b10](https://github.com/lionel1704/sn_client/commit/c917b108733c5765e520f6370ce4f336e8ae7ef2))
+* use known vs all elders, supermajority ([c8ba2b5](https://github.com/lionel1704/sn_client/commit/c8ba2b57d53a0c2b9228223777829b8a9723b61c))
+* use redirected addesses for elders ([cbd89b5](https://github.com/lionel1704/sn_client/commit/cbd89b564da12d42fdbd62b4af92f80e6bf26cb4))
+* use supermajority for assesing responses ([8659f62](https://github.com/lionel1704/sn_client/commit/8659f62cea16ddf3ac840c11f6f23cf2e105f916))
+* **errors:** Use updated sn_messaging ([e513ab3](https://github.com/lionel1704/sn_client/commit/e513ab3d737ac43b024d3216a689f36f3af476c6))
+* **map:** refactoring Map API ([6b8cabc](https://github.com/lionel1704/sn_client/commit/6b8cabc5c51e7ead597035ede8e4e9676bed8b46))
+* **qp2p:** Inital set up to enable listeners for qp2p ([63adbc7](https://github.com/lionel1704/sn_client/commit/63adbc7cbca5736850c880cb2316202bffebd94a))
+* **qp2p:** update qp2p version ([41958b3](https://github.com/lionel1704/sn_client/commit/41958b3a0bbcbcc6be9b3ff853d858ae476680d1))
+* **self-encrypt:** re add self encryption to client blob apis ([e550dad](https://github.com/lionel1704/sn_client/commit/e550dad3137d240d901077f04bc8cde1a23eed3c))
+* **seq:** Sign ops before applying locally + sending to network ([08d43c8](https://github.com/lionel1704/sn_client/commit/08d43c8a35643f25aecd5dc9c03911d1d2291067))
+* **seq:** Update to sn_data_types and update seq apis ([ad248a7](https://github.com/lionel1704/sn_client/commit/ad248a7e7fa6ab015ca02f61075642e6dc2ee619))
+* **seq:** Use signed ops for sequence append ([62c7d46](https://github.com/lionel1704/sn_client/commit/62c7d46fbd1b11aafac495a26ccabf8dbc6da1df))
+* **test:** enable logger in tests using tracing-subscriber ([448522b](https://github.com/lionel1704/sn_client/commit/448522b7e994df7c13b5203ce7326c40aad900de))
+* warn when we have an unused incoming message stream ([d348a57](https://github.com/lionel1704/sn_client/commit/d348a57729cabbd4e8ac366a901e7d0cdefee45e))
+* **transfer_id:** Provide u64 and pk of transfer to be used as id ([7bcd6b3](https://github.com/lionel1704/sn_client/commit/7bcd6b310b8fad52124b537a88fc74222b2f66de))
+* **transfers:** impl DebitAgreementProof aggregator ([8ad8c39](https://github.com/lionel1704/sn_client/commit/8ad8c395f8ac9838cbba3a71c08b86644cbce647))
+* **transfers:** impl StoreCost for data writes ([efaf2b0](https://github.com/lionel1704/sn_client/commit/efaf2b03b2dae6b02ffbc428fb2d816adf3bc8ae))
+
+
+### Bug Fixes
+
+* handle history failure more properly ([f46f025](https://github.com/lionel1704/sn_client/commit/f46f025a79f7ac5fb0f5e9baf13e69fea110aebf))
+* use tokio 1.6, 1.7 seems buggy ([5f8749c](https://github.com/lionel1704/sn_client/commit/5f8749ce3ca78c832ed69184e9398d4ee9b43dc8))
+* **bootstrap:** fix bootstrap logic when we get SectionInfo::Redirect ([cd6a24e](https://github.com/lionel1704/sn_client/commit/cd6a24ef46936fde1879bbb6df7b4feeb3ade24d))
+* **bootstrap:** reverting previous change to again wrap endpoint.connect_to() with a timeout ([0d51c57](https://github.com/lionel1704/sn_client/commit/0d51c57bba21b5ef914576d537db5ba3ac6fddc7))
+* **bootstrap:** wrap endpoint.connect_to() with a timeout ([7ea75b1](https://github.com/lionel1704/sn_client/commit/7ea75b13fcdad521ab49854f964694bc58d85227))
+* **connection_manager:** remove incorrect cloning of session ([67060d1](https://github.com/lionel1704/sn_client/commit/67060d1cb3d67f53d7d3653328ee3acd954deea0))
+* **connection_manager:** set forward-port to true to use public address ([0e5a21f](https://github.com/lionel1704/sn_client/commit/0e5a21f0642952390982d69d25e6c2781c039c04))
+* **deps:** use released version of qp2p instead of git branch ([c9b2392](https://github.com/lionel1704/sn_client/commit/c9b23920aa1acb13fc62c488f5d4c1b1fb82bf53))
+* **messaging:** don't discard error responses for Blob Queries ([c81a35a](https://github.com/lionel1704/sn_client/commit/c81a35abe96de7b397a8cc3780e6870bd0a98c33))
+* **query:** timeout when we don't get a response for a query ([9e6b782](https://github.com/lionel1704/sn_client/commit/9e6b7827f8cd054200a61887bc20c33e634b93bb))
+* rebase atop T5 ([e97ca23](https://github.com/lionel1704/sn_client/commit/e97ca238072fdf69408cdc4181c966f68f863fbe))
+* **messaging:** remove all non-bootstrapped elders from local list of elders ([275c353](https://github.com/lionel1704/sn_client/commit/275c353b5fb3595aa7812c3f6ab2066577d63288))
+* **query-listener:** listen to query responses from any of the elders ([b157eee](https://github.com/lionel1704/sn_client/commit/b157eeee20e27db68ccbb0b5ee07c10fc7baf37d))
+* **test:** fix assertion in blob_deletions test ([ad7d2ab](https://github.com/lionel1704/sn_client/commit/ad7d2ab7d46fc114856be799f7914ed4d640ce3c))
+* add testing feature flag again ([21412e0](https://github.com/lionel1704/sn_client/commit/21412e09563daca70585d731ef8cdec9d941ab01))
+* adjust for dt updates ([19d77a9](https://github.com/lionel1704/sn_client/commit/19d77a9b35afb9e31a0c42a0bbb0694934fdeac5))
+* choose longest history w/ simu payout responses ([d22aa01](https://github.com/lionel1704/sn_client/commit/d22aa0153518d9588b229234f634042baa4c22b4))
+* clippy ([d060aac](https://github.com/lionel1704/sn_client/commit/d060aac99ab1e4d209e43f5d3f67f2c3b4883aa3))
+* CmdError handling for validation reqs ([a7a7ad4](https://github.com/lionel1704/sn_client/commit/a7a7ad4e732b2d6e8b6fa24397ada97c4593eb8d))
+* create listeners before sending queries ([2651bfb](https://github.com/lionel1704/sn_client/commit/2651bfb9715ebf86cce7f683b4fe27eb7dadba1b))
+* doc tests ([e70db31](https://github.com/lionel1704/sn_client/commit/e70db31856d3951a6127ac46e73d8ae754bee112))
+* doc tests ([deffab3](https://github.com/lionel1704/sn_client/commit/deffab301c2c18f02c8ce283ffac415cc5fca745))
+* dont connect to elders until we have had a full section response/pk ([a3ec50e](https://github.com/lionel1704/sn_client/commit/a3ec50e1be7110995e65234fa4f7888e9aac712e))
+* double serialization bug ([7ef69a6](https://github.com/lionel1704/sn_client/commit/7ef69a6c224f3a5d25a366f0975acabecf83c662))
+* Logging during conn attempts fixed ([fdeb84f](https://github.com/lionel1704/sn_client/commit/fdeb84f3c125d5774f77d59293f4d1ff64e7e6e3))
+* remove unimplemented for match wildcard ([ea22dc8](https://github.com/lionel1704/sn_client/commit/ea22dc80365abee3e164531e18f40d194b30c0b6))
+* remove unused method ([ae2453e](https://github.com/lionel1704/sn_client/commit/ae2453e4b91a6972218ac9a393865d7224b9ad5e))
+* responses require threshold again ([d86bce4](https://github.com/lionel1704/sn_client/commit/d86bce44b2f59a76942b50d50439f2322a450641))
+* set response elected flag after electing best of the rest ([27726ee](https://github.com/lionel1704/sn_client/commit/27726eeb063500b48116d680659434429771045d))
+* TEMP_HACK: use random port to not throw conn pool out of whack ([311fa30](https://github.com/lionel1704/sn_client/commit/311fa301b5b932b5ed5ec03ff216360742b8624b))
+* threshold and error text ([11151d8](https://github.com/lionel1704/sn_client/commit/11151d8b448f3dede5e52cb9dd7b3f674cc348dd))
+* transfer listener cleanup should happen only once ([66454f7](https://github.com/lionel1704/sn_client/commit/66454f72e675e57d208688068c2f87d00c61fb03))
+* **blob:** fix blob flows and simplify the self_encryption process for ([423002e](https://github.com/lionel1704/sn_client/commit/423002edb99691f8b32b91d4441b1869644d92ff))
+* **blob:** fix bug in blog storage ([d7dec70](https://github.com/lionel1704/sn_client/commit/d7dec705f63221faff2f538263eb87962291885f))
+* **blob:** fix writing blob with always our PublicKey ([ae2aea4](https://github.com/lionel1704/sn_client/commit/ae2aea4150d7f33959e08dfb29626ec42ef2ed5c))
+* **bootstrap:** connect to all nodes and dont overwrite qp2p ([bcb31bd](https://github.com/lionel1704/sn_client/commit/bcb31bd410172c9f8c1245a9389b70776f9b7d6a))
+* use latest qp2p & so dont remove good connections from pool ([fa8fbd2](https://github.com/lionel1704/sn_client/commit/fa8fbd2573840533f23186f7b9764150863027d4))
+* use msg id new fn for random id ([103beb5](https://github.com/lionel1704/sn_client/commit/103beb584fac08d9e58cd638c54206406eabe72a))
+* **ci:** fix dependency graph script ([0e178e2](https://github.com/lionel1704/sn_client/commit/0e178e267a726a9d293dcd8b6a8e777dc9a3e8db))
+* **connections:** Dont fail when one elder cannot connect ([cf4db2c](https://github.com/lionel1704/sn_client/commit/cf4db2c465aade7ab45443758bd2ae0ebc2a5ed9))
+* **connections:** retry failed connections ([f14ebe6](https://github.com/lionel1704/sn_client/commit/f14ebe6b6bee0e035bb0e485753cc8810ce54c53))
+* **data_types:** update to new MsgEnvelope ([4d53f14](https://github.com/lionel1704/sn_client/commit/4d53f147c026015fe5c6092695edf75f38b46378))
+* **msgs:** fix random msg id generation ([624a5b0](https://github.com/lionel1704/sn_client/commit/624a5b058d4930f9e417ef33e603373e715d7378))
+* **new:** Fix simulated payout dot and related tests ([a795d4a](https://github.com/lionel1704/sn_client/commit/a795d4a02fd6c2258534f5b635b8d88a7793f2b9))
+* **qp2p:** Fixes for latest qp2p master ([0a5001b](https://github.com/lionel1704/sn_client/commit/0a5001b2fa21e22513a37621e7f35636fe6d840e))
+* **responses:** Remove unneeded shortcircuit and clarify logs in repsonse handling ([a86bbcd](https://github.com/lionel1704/sn_client/commit/a86bbcda6517a25b2080696b0890cf826d86fd65))
+* **seq:** sign op.crdt_op ([a584ef0](https://github.com/lionel1704/sn_client/commit/a584ef0c3ed672cce2cfc5bfee980c681d00d0f6))
+* **test:** don't hide exported tests behind #[cfg(test)] ([40d0766](https://github.com/lionel1704/sn_client/commit/40d0766efa2e57013c117e565c01f149dc455d4d))
+* **tests:** fix actor and Money transfer tests ([ad67e08](https://github.com/lionel1704/sn_client/commit/ad67e08ebdb981c9558d6b37c39503641defdbd0))
+
+
+### update
+
+* **deps:** update to the latest version of sn_messaging ([4882ad0](https://github.com/lionel1704/sn_client/commit/4882ad0986c186d7c7d539b2fb1fb9f5fe73dce2))
+
+
+* chore(deps) update deps to latest ([973ad2c](https://github.com/lionel1704/sn_client/commit/973ad2ca3411af51fed7b283d8bba1098185d556))
+* changes to upgrade sn_messaging to v34.0 ([3d405a7](https://github.com/lionel1704/sn_client/commit/3d405a73bf555e0d9aef32ae71c3cd92d322e52a))
+* **deps:** update qp2p version ([c91c555](https://github.com/lionel1704/sn_client/commit/c91c555a3fe3e4a2faf543134aa1ee322fbde158))
+* **deps:** update sn_messaging to 19.0.1 and sn_data_types to ([91709e5](https://github.com/lionel1704/sn_client/commit/91709e555c9747629d3cacc3b1b9e91246b244e7))
+* **deps:** update sn_messaging version to 20.0.1 ([4c8249d](https://github.com/lionel1704/sn_client/commit/4c8249d22e5cbd2b424dc76bed833656cf39915e))
+* DT dep update ([ded2602](https://github.com/lionel1704/sn_client/commit/ded260297119a6025b9dcac92889ca3ebf09afc5))
+* **deps:** update sn_transfers, sn_messaging, sn_data_types ([4b5d876](https://github.com/lionel1704/sn_client/commit/4b5d876aea68f6252c100f13c6766ea38e67d2d4))
+* **tokio:** upgrade qp2p to v0.10.1 and tokio to v1.3.0 ([07ce604](https://github.com/lionel1704/sn_client/commit/07ce6045f371b3cdef7c8f23c027b304b506cb2a))
+* rename money to token ([62f816a](https://github.com/lionel1704/sn_client/commit/62f816a5552b09822745c7f50b4d9b9c73824aca))
+
 ### [0.61.1](https://github.com/maidsafe/sn_client/compare/v0.61.0...v0.61.1) (2021-06-17)
 
 
