@@ -30,7 +30,7 @@ const NUMBER_OF_RETRIES: usize = 3;
 // Number of Elders subset to send queries to
 const NUM_OF_ELDERS_SUBSET_FOR_QUERIES: usize = 3;
 
-const QUERY_TIMEOUT_SECONDS: u64 = 3 * 60;
+const QUERY_TIMEOUT_SECONDS: u64 = 10 * 60;
 
 impl Session {
     /// Bootstrap to the network maintaining connections to several nodes.
